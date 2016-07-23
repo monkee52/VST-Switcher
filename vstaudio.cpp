@@ -1,3 +1,6 @@
+#define UNICODE
+#define _UNICODE
+
 #include <stdio.h>
 #include <Windows.h>
 #include <mmdeviceapi.h>
@@ -6,13 +9,34 @@
 #include <PropIdl.h>
 #include <endpointvolume.h>
 
+#include <objbase.h>
+#include <MsXml6.h>
+
 #include "PolicyConfig.h"
 
 #pragma comment(lib, "ole32.lib")
+#pragma comment(lib, "oleaut32.lib")
 #pragma comment(lib, "user32.lib")
 
 #define EXIT_ON_ERROR(hres) if (FAILED(hres)) { goto Exit; }
 #define SAFE_RELEASE(punk) if ((punk) != NULL) { (punk)->Release(); (punk) = NULL; }
+#define CHK_ALLOC(p) ((!(p)) ? E_OUTOFMEMORY : S_OK)
+
+#define PING printf("file: %s line: %d\n", __FILE__, __LINE__)
+
+HRESULT VariantFromString(PCWSTR wszValue, VARIANT &variant) {
+	HRESULT hr = S_OK;
+	BSTR bstr = SysAllocString(wszValue);
+
+	if (!bstr) {
+		return E_OUTOFMEMORY;
+	}
+
+	V_VT(&variant) = VT_BSTR;
+	V_BSTR(&variant) = bstr;
+
+	return hr;
+}
 
 int main(int argc, char * argv[]) {
 	HWND hWnd = GetConsoleWindow();
@@ -25,10 +49,10 @@ int main(int argc, char * argv[]) {
 
 	bool flag = false;
 
+	HRESULT hr = S_OK;
 	IAudioEndpointVolume *pEndpointVolume = NULL;
 	IPolicyConfigVista *pPolicyConfig = NULL;
 
-	HRESULT hr = S_OK;
 	IMMDeviceEnumerator *pEnumerator = NULL;
 	IMMDeviceCollection *pCollection = NULL;
 	IMMDevice *pEndpoint = NULL;
@@ -38,6 +62,148 @@ int main(int argc, char * argv[]) {
 	hr = CoInitialize(NULL);
 
 	EXIT_ON_ERROR(hr);
+
+	// Read config
+	IXMLDOMDocument *pXMLDom = NULL;
+	IXMLDOMParseError *pXMLErr = NULL;
+
+	hr = CoCreateInstance(__uuidof(DOMDocument60), NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pXMLDom));
+
+	EXIT_ON_ERROR(hr);
+
+	pXMLDom->put_async(VARIANT_FALSE);
+	pXMLDom->put_validateOnParse(VARIANT_FALSE);
+	pXMLDom->put_resolveExternals(VARIANT_FALSE);
+
+	VARIANT varFileName;
+	VARIANT_BOOL varStatus;
+	BSTR bstrErr = NULL;
+
+	VariantInit(&varFileName);
+
+	hr = VariantFromString(L"config.xml", varFileName);
+
+	EXIT_ON_ERROR(hr);
+
+	hr = pXMLDom->load(varFileName, &varStatus);
+
+	EXIT_ON_ERROR(hr);
+
+	if (varStatus != VARIANT_TRUE) {
+		hr = pXMLDom->get_parseError(&pXMLErr);
+
+		EXIT_ON_ERROR(hr);
+
+		hr = pXMLErr->get_reason(&bstrErr);
+
+		EXIT_ON_ERROR(hr);
+
+		printf("Failed to load configuration: %S\n", bstrErr);
+
+		goto Exit;
+	}
+
+	BSTR bstrNodeValue = NULL;
+	BSTR bstrQuery = SysAllocString(L"//audio-device");
+
+	LPWSTR szAudioEndpoint = NULL;
+	LPWSTR szProgramPath = NULL;
+
+	hr = CHK_ALLOC(bstrQuery);
+
+	EXIT_ON_ERROR(hr);
+
+	IXMLDOMNode *pNode = NULL;
+	IXMLDOMNodeList *pXMLNodeList;
+	long lCount;
+
+	hr = pXMLDom->selectSingleNode(bstrQuery, &pNode);
+
+	EXIT_ON_ERROR(hr);
+
+	if (pNode) {
+		hr = pNode->get_childNodes(&pXMLNodeList);
+
+		EXIT_ON_ERROR(hr);
+
+		hr = pXMLNodeList->get_length(&lCount);
+
+		EXIT_ON_ERROR(hr);
+
+		if (lCount > 0) {
+			hr = pXMLNodeList->get_item(0, &pNode);
+
+			EXIT_ON_ERROR(hr);
+
+			hr = pNode->get_text(&bstrNodeValue);
+
+			EXIT_ON_ERROR(hr);
+
+			szAudioEndpoint = bstrNodeValue;
+
+			SAFE_RELEASE(pNode);
+		} else {
+			//todo
+			printf("XML Error\n");
+
+			goto Exit;
+		}
+	} else {
+		//todo
+		printf("XML Error\n");
+
+		goto Exit;
+	}
+
+	SysFreeString(bstrQuery);
+
+	SAFE_RELEASE(pXMLNodeList);
+
+	bstrQuery = SysAllocString(L"//program-path");
+
+	hr = CHK_ALLOC(bstrQuery);
+
+	EXIT_ON_ERROR(hr);
+
+	hr = pXMLDom->selectSingleNode(bstrQuery, &pNode);
+
+	EXIT_ON_ERROR(hr);
+
+	if (pNode) {
+		hr = pNode->get_childNodes(&pXMLNodeList);
+
+		EXIT_ON_ERROR(hr);
+
+		hr = pXMLNodeList->get_length(&lCount);
+
+		EXIT_ON_ERROR(hr);
+
+		if (lCount > 0) {
+			hr = pXMLNodeList->get_item(0, &pNode);
+
+			EXIT_ON_ERROR(hr);
+
+			hr = pNode->get_text(&bstrNodeValue);
+
+			EXIT_ON_ERROR(hr);
+
+			szProgramPath = bstrNodeValue;
+
+			SAFE_RELEASE(pNode);
+		} else {
+			//todo
+			printf("XML Error\n");
+
+			goto Exit;
+		}
+	} else {
+		//todo
+		printf("XML Error\n");
+
+		goto Exit;
+	}
+
+	SysFreeString(bstrQuery);
 
 	hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (LPVOID *)&pEnumerator);
 
@@ -93,7 +259,7 @@ int main(int argc, char * argv[]) {
 
 		EXIT_ON_ERROR(hr);
 
-		if (wcscmp(varName.pwszVal, L"Line 1 (Virtual Audio Cable)") == 0) {
+		if (wcscmp(varName.pwszVal, szAudioEndpoint) == 0) {
 			targetID = (LPWSTR)malloc(wcslen(pwszID) * sizeof(WCHAR) + 1);
 
 			wcscpy(targetID, pwszID);
@@ -158,7 +324,7 @@ int main(int argc, char * argv[]) {
 
 	ZeroMemory(&pi, sizeof(pi));
 
-	if (!CreateProcess(NULL, "C:\\Users\\Ayden\\VSTHost\\vsthost.exe", NULL, NULL, FALSE, 0, NULL, NULL, (LPSTARTUPINFO)&si, (LPPROCESS_INFORMATION)&pi)) {
+	if (!CreateProcess(NULL, szProgramPath, NULL, NULL, FALSE, 0, NULL, NULL, (LPSTARTUPINFO)&si, (LPPROCESS_INFORMATION)&pi)) {
 		printf("CreateProcess failed (%d).\n", GetLastError());
 	} else {
 		WaitForSingleObject(pi.hProcess, INFINITE);
@@ -200,6 +366,16 @@ int main(int argc, char * argv[]) {
 
 		SAFE_RELEASE(pPolicyConfig);
 		SAFE_RELEASE(pEndpointVolume);
+
+		SAFE_RELEASE(pXMLDom);
+		SAFE_RELEASE(pXMLErr);
+		SAFE_RELEASE(pNode);
+		SAFE_RELEASE(pXMLNodeList);
+		
+		VariantClear(&varFileName);
+
+		SysFreeString(bstrErr);
+		SysFreeString(bstrQuery);
 
 		CoUninitialize();
 
