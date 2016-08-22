@@ -518,7 +518,7 @@ void LaunchAndWait(LPWSTR programPath) {
 	CloseHandle(pi.hThread);
 }
 
-int main(int argc, char * argv[]) {
+int wmain(int argc, wchar_t * argv[]) {
 	HRESULT hr = CoInitialize(NULL);
 
 	if (FAILED(hr)) {
