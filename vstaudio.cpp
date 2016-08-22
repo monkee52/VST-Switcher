@@ -1,28 +1,19 @@
 #define UNICODE
 #define _UNICODE
 
-#include <stdio.h>
 #include <Windows.h>
+#include <endpointvolume.h>
 #include <mmdeviceapi.h>
 #include <Functiondiscoverykeys_devpkey.h>
-#include <Objbase.h>
-#include <PropIdl.h>
-#include <endpointvolume.h>
-
-#include <objbase.h>
 #include <MsXml6.h>
+#include <comdef.h>
 
 #include "PolicyConfig.h"
 
-#pragma comment(lib, "ole32.lib")
-#pragma comment(lib, "oleaut32.lib")
-#pragma comment(lib, "user32.lib")
-
-#define EXIT_ON_ERROR(hres) if (FAILED(hres)) { goto Exit; }
 #define SAFE_RELEASE(punk) if ((punk) != NULL) { (punk)->Release(); (punk) = NULL; }
 #define CHK_ALLOC(p) ((!(p)) ? E_OUTOFMEMORY : S_OK)
 
-#define PING printf("file: %s line: %d\n", __FILE__, __LINE__)
+#define PING wprintf(L"file: %s line: %d\n", __FILE__, __LINE__)
 
 HRESULT VariantFromString(PCWSTR wszValue, VARIANT &variant) {
 	HRESULT hr = S_OK;
@@ -38,218 +29,352 @@ HRESULT VariantFromString(PCWSTR wszValue, VARIANT &variant) {
 	return hr;
 }
 
-int main(int argc, char * argv[]) {
-	HWND hWnd = GetConsoleWindow();
-	HMENU hMenu = GetSystemMenu(hWnd, FALSE);
+LPWSTR ConvHrToWstr(HRESULT hr) {
+	_com_error err(hr);
 
-	EnableMenuItem(hMenu, SC_CLOSE, MF_BYCOMMAND | MF_DISABLED | MF_GRAYED);
+	LPWSTR text = (LPWSTR)err.ErrorMessage();
+	DWORD len = 13 + wcslen(text);
+	LPWSTR result = new WCHAR[len];
 
-	LPWSTR targetID = NULL;
-	LPWSTR defaultID = NULL;
+	_snwprintf(result, len, L"%#010x: %s", hr, text);
 
-	bool flag = false;
+	return result;
+}
 
-	HRESULT hr = S_OK;
-	IAudioEndpointVolume *pEndpointVolume = NULL;
-	IPolicyConfigVista *pPolicyConfig = NULL;
+LPWSTR ConvWinErrToWstr() {
+	DWORD errCode = GetLastError();
 
-	IMMDeviceEnumerator *pEnumerator = NULL;
-	IMMDeviceCollection *pCollection = NULL;
-	IMMDevice *pEndpoint = NULL;
-	IPropertyStore *pProps = NULL;
-	LPWSTR pwszID = NULL;
+	LPWSTR text;
 
-	hr = CoInitialize(NULL);
+	FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, errCode, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&text, 0, NULL);
 
-	EXIT_ON_ERROR(hr);
+	DWORD len = 13 + wcslen(text);
+	LPWSTR result = new WCHAR[len];
 
-	// Read config
-	IXMLDOMDocument *pXMLDom = NULL;
-	IXMLDOMParseError *pXMLErr = NULL;
+	_snwprintf(result, len, L"%#010x: %s", errCode, text);
 
-	hr = CoCreateInstance(__uuidof(DOMDocument60), NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pXMLDom));
+	LocalFree(text);
 
-	EXIT_ON_ERROR(hr);
+	return result;
+}
 
-	pXMLDom->put_async(VARIANT_FALSE);
-	pXMLDom->put_validateOnParse(VARIANT_FALSE);
-	pXMLDom->put_resolveExternals(VARIANT_FALSE);
+class Configuration {
+	private:
+		IXMLDOMDocument * pXMLDom = NULL;
+		bool unsavedChanges = false;
+		bool opened = false;
+		LPWSTR filename = NULL;
 
-	VARIANT varFileName;
-	VARIANT_BOOL varStatus;
-	BSTR bstrErr = NULL;
+	public:
+		Configuration(LPWSTR filename) {
+			this->filename = filename;
+		}
 
-	VariantInit(&varFileName);
+		~Configuration() {
+			SAFE_RELEASE(this->pXMLDom);
 
-	hr = VariantFromString(L"config.xml", varFileName);
+			this->opened = false;
+		}
 
-	EXIT_ON_ERROR(hr);
+		void Open() {
+			if (this->opened) {
+				return;
+			}
 
-	hr = pXMLDom->load(varFileName, &varStatus);
+			HRESULT hr = CoCreateInstance(__uuidof(DOMDocument60), NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&this->pXMLDom));
 
-	EXIT_ON_ERROR(hr);
+			if (FAILED(hr)) {
+				throw ConvHrToWstr(hr);
+			}
 
-	if (varStatus != VARIANT_TRUE) {
-		hr = pXMLDom->get_parseError(&pXMLErr);
+			this->pXMLDom->put_async(VARIANT_FALSE);
+			this->pXMLDom->put_validateOnParse(VARIANT_TRUE);
+			this->pXMLDom->put_resolveExternals(VARIANT_FALSE);
 
-		EXIT_ON_ERROR(hr);
+			VARIANT varFilename;
 
-		hr = pXMLErr->get_reason(&bstrErr);
+			VariantInit(&varFilename);
 
-		EXIT_ON_ERROR(hr);
+			hr = VariantFromString(this->filename, varFilename);
 
-		printf("Failed to load configuration: %S\n", bstrErr);
+			if (FAILED(hr)) {
+				SAFE_RELEASE(this->pXMLDom);
+				
+				VariantClear(&varFilename);
 
-		goto Exit;
-	}
+				throw ConvHrToWstr(hr);
+			}
 
-	BSTR bstrNodeValue = NULL;
-	BSTR bstrQuery = SysAllocString(L"//audio-device");
+			VARIANT_BOOL varStatus;
 
-	LPWSTR szAudioEndpoint = NULL;
-	LPWSTR szProgramPath = NULL;
+			hr = pXMLDom->load(varFilename, &varStatus);
 
-	hr = CHK_ALLOC(bstrQuery);
+			VariantClear(&varFilename);
 
-	EXIT_ON_ERROR(hr);
+			if (FAILED(hr)) {
+				SAFE_RELEASE(this->pXMLDom);
 
-	IXMLDOMNode *pNode = NULL;
-	IXMLDOMNodeList *pXMLNodeList;
-	long lCount;
+				throw ConvHrToWstr(hr);
+			}
 
-	hr = pXMLDom->selectSingleNode(bstrQuery, &pNode);
+			if (varStatus != VARIANT_TRUE) {
+				IXMLDOMParseError * pXMLErr = NULL;
 
-	EXIT_ON_ERROR(hr);
+				hr = pXMLDom->get_parseError(&pXMLErr);
 
-	if (pNode) {
-		hr = pNode->get_childNodes(&pXMLNodeList);
+				if (FAILED(hr)) {
+					SAFE_RELEASE(this->pXMLDom);
 
-		EXIT_ON_ERROR(hr);
+					throw ConvHrToWstr(hr);
+				}
 
-		hr = pXMLNodeList->get_length(&lCount);
+				long errCode;
 
-		EXIT_ON_ERROR(hr);
+				hr = pXMLErr->get_errorCode(&errCode);
 
-		if (lCount > 0) {
-			hr = pXMLNodeList->get_item(0, &pNode);
+				if (FAILED(hr)) {
+					SAFE_RELEASE(pXMLErr);
+					SAFE_RELEASE(this->pXMLDom);
 
-			EXIT_ON_ERROR(hr);
+					throw ConvHrToWstr(hr);
+				}
 
-			hr = pNode->get_text(&bstrNodeValue);
+				BSTR bstrErr;
 
-			EXIT_ON_ERROR(hr);
+				hr = pXMLErr->get_reason(&bstrErr);
 
-			szAudioEndpoint = bstrNodeValue;
+				if (FAILED(hr)) {
+					SAFE_RELEASE(pXMLErr);
+					SAFE_RELEASE(this->pXMLDom);
+
+					throw ConvHrToWstr(hr);
+				}
+
+				DWORD len = 13 + wcslen(bstrErr);
+				LPWSTR errMsg = new WCHAR[len];
+
+				_snwprintf(errMsg, len, L"%#010x: %s", errCode, bstrErr);
+
+				SysFreeString(bstrErr);
+
+				throw errMsg;
+			}
+
+			this->opened = true;
+		}
+
+		void Save() {
+			if (!this->unsavedChanges) {
+				return;
+			}
+
+			VARIANT varFilename;
+
+			VariantInit(&varFilename);
+
+			HRESULT hr = VariantFromString(this->filename, varFilename);
+
+			if (FAILED(hr)) {
+				SAFE_RELEASE(this->pXMLDom);
+
+				VariantClear(&varFilename);
+			}
+
+			hr = this->pXMLDom->save(varFilename);
+
+			if (FAILED(hr)) {
+				SAFE_RELEASE(this->pXMLDom);
+
+				throw hr;
+			}
+
+			this->unsavedChanges = false;
+		}
+
+		LPWSTR Read(LPWSTR key, LPWSTR defaultValue) {
+			DWORD queryLen = wcslen(key) + 27;
+			LPWSTR query = new WCHAR[queryLen];
+
+			_snwprintf(query, queryLen, L"/settings/setting[@key='%s']", key);
+
+			BSTR bstrQuery = SysAllocString(query);
+
+			delete query;
+
+			HRESULT hr = CHK_ALLOC(bstrQuery);
+
+			if (FAILED(hr)) {
+				throw ConvHrToWstr(hr);
+			}
+
+			IXMLDOMNode * pNode = NULL;
+			IXMLDOMNodeList * pXMLNodeList = NULL;
+
+			hr = this->pXMLDom->selectSingleNode(bstrQuery, &pNode);
+
+			SysFreeString(bstrQuery);
+
+			if (FAILED(hr)) {
+				throw ConvHrToWstr(hr);
+			}
+
+			if (pNode == NULL) {
+				return defaultValue;
+			}
+
+			hr = pNode->get_childNodes(&pXMLNodeList);
 
 			SAFE_RELEASE(pNode);
-		} else {
-			//todo
-			printf("XML Error\n");
 
-			goto Exit;
+			if (FAILED(hr)) {
+				throw ConvHrToWstr(hr);
+			}
+
+			long lCount;
+
+			hr = pXMLNodeList->get_length(&lCount);
+
+			if (FAILED(hr)) {
+				SAFE_RELEASE(pXMLNodeList);
+
+				throw ConvHrToWstr(hr);
+			}
+
+			if (lCount > 0) {
+				hr = pXMLNodeList->get_item(0, &pNode);
+
+				SAFE_RELEASE(pXMLNodeList);
+
+				if (FAILED(hr)) {
+					throw ConvHrToWstr(hr);
+				}
+
+				BSTR bstrNodeValue = NULL;
+
+				hr = pNode->get_text(&bstrNodeValue);
+
+				if (FAILED(hr)) {
+					throw ConvHrToWstr(hr);
+				}
+
+				LPWSTR retValue = bstrNodeValue == NULL ? L"" : bstrNodeValue;
+
+				SAFE_RELEASE(pNode);
+
+				return retValue;
+			} else {
+				SAFE_RELEASE(pXMLNodeList);
+
+				return defaultValue;
+			}
 		}
-	} else {
-		//todo
-		printf("XML Error\n");
 
-		goto Exit;
+		void Write(LPWSTR key, LPWSTR value) {
+			this->unsavedChanges = true;
+		}
+};
+
+LPWSTR GetAudioEndpointId(LPWSTR name) {
+	IMMDeviceEnumerator * pEnumerator = NULL;
+
+	HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (LPVOID *)&pEnumerator);
+
+	if (FAILED(hr)) {
+		throw ConvHrToWstr(hr);
 	}
 
-	SysFreeString(bstrQuery);
+	IMMDevice * pEndpoint = NULL;
+	LPWSTR retValue = NULL;
 
-	SAFE_RELEASE(pXMLNodeList);
+	// Return default device ID
+	if (name == NULL) {
+		hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &pEndpoint);
 
-	bstrQuery = SysAllocString(L"//program-path");
+		if (FAILED(hr)) {
+			SAFE_RELEASE(pEnumerator);
 
-	hr = CHK_ALLOC(bstrQuery);
-
-	EXIT_ON_ERROR(hr);
-
-	hr = pXMLDom->selectSingleNode(bstrQuery, &pNode);
-
-	EXIT_ON_ERROR(hr);
-
-	if (pNode) {
-		hr = pNode->get_childNodes(&pXMLNodeList);
-
-		EXIT_ON_ERROR(hr);
-
-		hr = pXMLNodeList->get_length(&lCount);
-
-		EXIT_ON_ERROR(hr);
-
-		if (lCount > 0) {
-			hr = pXMLNodeList->get_item(0, &pNode);
-
-			EXIT_ON_ERROR(hr);
-
-			hr = pNode->get_text(&bstrNodeValue);
-
-			EXIT_ON_ERROR(hr);
-
-			szProgramPath = bstrNodeValue;
-
-			SAFE_RELEASE(pNode);
-		} else {
-			//todo
-			printf("XML Error\n");
-
-			goto Exit;
+			throw ConvHrToWstr(hr);
 		}
-	} else {
-		//todo
-		printf("XML Error\n");
 
-		goto Exit;
+		LPWSTR pwszID = NULL;
+
+		hr = pEndpoint->GetId(&pwszID);
+
+		if (FAILED(hr)) {
+			SAFE_RELEASE(pEnumerator);
+			SAFE_RELEASE(pEndpoint);
+
+			throw ConvHrToWstr(hr);
+		}
+
+		retValue = new WCHAR[wcslen(pwszID) + 1];
+
+		wcscpy(retValue, pwszID);
+
+		SAFE_RELEASE(pEnumerator);
+		SAFE_RELEASE(pEndpoint);
+
+		return retValue;
 	}
 
-	SysFreeString(bstrQuery);
-
-	hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (LPVOID *)&pEnumerator);
-
-	EXIT_ON_ERROR(hr);
-
-	hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &pEndpoint);
-
-	EXIT_ON_ERROR(hr);
-
-	hr = pEndpoint->GetId(&pwszID);
-
-	EXIT_ON_ERROR(hr);
-
-	defaultID = (LPWSTR)malloc(wcslen(pwszID) * sizeof(WCHAR) + 1);
-
-	wcscpy(defaultID, pwszID);
-
-	SAFE_RELEASE(pEndpoint);
+	IMMDeviceCollection * pCollection = NULL;
 
 	hr = pEnumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pCollection);
 
-	EXIT_ON_ERROR(hr);
+	SAFE_RELEASE(pEnumerator);
+
+	if (FAILED(hr)) {
+		throw ConvHrToWstr(hr);
+	}
 
 	UINT count;
 
 	hr = pCollection->GetCount(&count);
 
-	EXIT_ON_ERROR(hr);
+	if (FAILED(hr)) {
+		SAFE_RELEASE(pCollection);
+
+		throw ConvHrToWstr(hr);
+	}
 
 	if (count == 0) {
-		printf("No endpoints found.\n");
-		goto Exit;
+		SAFE_RELEASE(pCollection);
+
+		return NULL;
 	}
 
 	for (ULONG i = 0; i < count; i++) {
+		IMMDevice * pEndpoint = NULL;
+
 		hr = pCollection->Item(i, &pEndpoint);
 
-		EXIT_ON_ERROR(hr);
+		if (FAILED(hr)) {
+			SAFE_RELEASE(pCollection);
+
+			throw ConvHrToWstr(hr);
+		}
+
+		LPWSTR pwszID;
 
 		hr = pEndpoint->GetId(&pwszID);
 
-		EXIT_ON_ERROR(hr);
+		if (FAILED(hr)) {
+			SAFE_RELEASE(pCollection);
+			SAFE_RELEASE(pEndpoint);
+
+			throw ConvHrToWstr(hr);
+		}
+
+		IPropertyStore * pProps = NULL;
 
 		hr = pEndpoint->OpenPropertyStore(STGM_READ, &pProps);
 
-		EXIT_ON_ERROR(hr);
+		if (FAILED(hr)) {
+			SAFE_RELEASE(pCollection);
+			SAFE_RELEASE(pEndpoint);
+
+			throw ConvHrToWstr(hr);
+		}
 
 		PROPVARIANT varName;
 
@@ -257,64 +382,123 @@ int main(int argc, char * argv[]) {
 
 		hr = pProps->GetValue(PKEY_Device_FriendlyName, &varName);
 
-		EXIT_ON_ERROR(hr);
+		if (FAILED(hr)) {
+			SAFE_RELEASE(pCollection);
+			SAFE_RELEASE(pEndpoint);
+			SAFE_RELEASE(pProps);
+			
+			PropVariantClear(&varName);
 
-		if (wcscmp(varName.pwszVal, szAudioEndpoint) == 0) {
-			targetID = (LPWSTR)malloc(wcslen(pwszID) * sizeof(WCHAR) + 1);
-
-			wcscpy(targetID, pwszID);
-
-			flag = true;
+			throw ConvHrToWstr(hr);
 		}
+
+		if (wcscmp(varName.pwszVal, name) == 0) {
+			retValue = new WCHAR[wcslen(pwszID) + 1];
+
+			wcscpy(retValue, pwszID);
+
+			SAFE_RELEASE(pCollection);
+			SAFE_RELEASE(pEndpoint);
+			SAFE_RELEASE(pProps);
+
+			PropVariantClear(&varName);
+			CoTaskMemFree(pwszID);
+
+			return retValue;
+		}
+
+		SAFE_RELEASE(pEndpoint);
+		SAFE_RELEASE(pProps);
 
 		CoTaskMemFree(pwszID);
-
-		pwszID = NULL;
-
-		PropVariantClear(&varName);
-
-		SAFE_RELEASE(pProps);
-		SAFE_RELEASE(pEndpoint);
-
-		if (flag) {
-			break;
-		}
 	}
 
 	SAFE_RELEASE(pCollection);
 
-	hr = pEnumerator->GetDevice(defaultID, &pEndpoint);
+	return NULL;
+}
 
-	EXIT_ON_ERROR(hr);
+void SetDefaultAudioEndpoint(LPWSTR deviceId) {
+	IPolicyConfigVista * pPolicyConfig = NULL;
+
+	HRESULT hr = CoCreateInstance(__uuidof(CPolicyConfigVistaClient), NULL, CLSCTX_ALL, __uuidof(IPolicyConfigVista), (LPVOID *)&pPolicyConfig);
+
+	if (FAILED(hr)) {
+		throw ConvHrToWstr(hr);
+	}
+
+	hr = pPolicyConfig->SetDefaultEndpoint(deviceId, eMultimedia);
+
+	SAFE_RELEASE(pPolicyConfig);
+
+	if (FAILED(hr)) {
+		throw ConvHrToWstr(hr);
+	}
+}
+
+void RwAudioEndpointVolume(LPWSTR deviceId, BOOL set, float * volume, BOOL * mute) {
+	IMMDeviceEnumerator * pEnumerator = NULL;
+
+	HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (LPVOID *)&pEnumerator);
+
+	if (FAILED(hr)) {
+		throw ConvHrToWstr(hr);
+	}
+
+	IMMDevice * pEndpoint = NULL;
+
+	hr = pEnumerator->GetDevice(deviceId, &pEndpoint);
+
+	SAFE_RELEASE(pEnumerator);
+
+	if (FAILED(hr)) {
+		throw ConvHrToWstr(hr);
+	}
+
+	IAudioEndpointVolume * pEndpointVolume = NULL;
 
 	hr = pEndpoint->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (LPVOID *)&pEndpointVolume);
 
-	EXIT_ON_ERROR(hr);
 	SAFE_RELEASE(pEndpoint);
 
-	hr = CoCreateInstance(__uuidof(CPolicyConfigVistaClient), NULL, CLSCTX_ALL, __uuidof(IPolicyConfigVista), (LPVOID *)&pPolicyConfig);
+	if (FAILED(hr)) {
+		throw ConvHrToWstr(hr);
+	}
 
-	EXIT_ON_ERROR(hr);
+	if (set) {
+		hr = pEndpointVolume->SetMasterVolumeLevelScalar(*volume, NULL);
+	} else {
+		hr = pEndpointVolume->GetMasterVolumeLevelScalar(volume);
+	}
 
-	hr = pPolicyConfig->SetDefaultEndpoint(targetID, eMultimedia);
+	if (FAILED(hr)) {
+		SAFE_RELEASE(pEndpointVolume);
 
-	EXIT_ON_ERROR(hr);
+		throw ConvHrToWstr(hr);
+	}
 
-	free(targetID);
+	if (set) {
+		hr = pEndpointVolume->SetMute(*mute, NULL);
+	} else {
+		hr = pEndpointVolume->GetMute(mute);
+	}
 
-	// Small delay for the system to actually switch over the audio device, prevents loud volume surge
-	Sleep(250);
+	SAFE_RELEASE(pEndpointVolume);
 
-	float defaultVolume = 0.0;
+	if (FAILED(hr)) {
+		throw ConvHrToWstr(hr);
+	}
+}
 
-	hr = pEndpointVolume->GetMasterVolumeLevelScalar(&defaultVolume);
+void GetAudioEndpointVolume(LPWSTR deviceId, float * volume, BOOL * mute) {
+	RwAudioEndpointVolume(deviceId, FALSE, volume, mute);
+}
 
-	EXIT_ON_ERROR(hr);
+void SetAudioEndpointVolume(LPWSTR deviceId, float volume, BOOL mute) {
+	RwAudioEndpointVolume(deviceId, TRUE, &volume, &mute);
+}
 
-	hr = pEndpointVolume->SetMasterVolumeLevelScalar((float)1.0, NULL);
-
-	EXIT_ON_ERROR(hr);
-
+void LaunchAndWait(LPWSTR programPath) {
 	STARTUPINFO si;
 	PROCESS_INFORMATION pi;
 
@@ -324,62 +508,115 @@ int main(int argc, char * argv[]) {
 
 	ZeroMemory(&pi, sizeof(pi));
 
-	if (!CreateProcess(NULL, szProgramPath, NULL, NULL, FALSE, 0, NULL, NULL, (LPSTARTUPINFO)&si, (LPPROCESS_INFORMATION)&pi)) {
-		printf("CreateProcess failed (%d).\n", GetLastError());
-	} else {
-		WaitForSingleObject(pi.hProcess, INFINITE);
-
-		CloseHandle(pi.hProcess);
-		CloseHandle(pi.hThread);
+	if (!CreateProcess(NULL, programPath, NULL, NULL, FALSE, 0, NULL, NULL, (LPSTARTUPINFO)&si, (LPPROCESS_INFORMATION)&pi)) {
+		throw ConvWinErrToWstr();
 	}
 
-	hr = pPolicyConfig->SetDefaultEndpoint(defaultID, eMultimedia);
+	WaitForSingleObject(pi.hProcess, INFINITE);
 
-	EXIT_ON_ERROR(hr);
+	CloseHandle(pi.hProcess);
+	CloseHandle(pi.hThread);
+}
 
-	free(defaultID);
+int main(int argc, char * argv[]) {
+	HRESULT hr = CoInitialize(NULL);
 
-	SAFE_RELEASE(pPolicyConfig);
+	if (FAILED(hr)) {
+		fwprintf(stderr, L"Could not initialize COM\n %s\n", ConvHrToWstr(hr));
 
-	hr = pEndpointVolume->SetMasterVolumeLevelScalar(defaultVolume, NULL);
+		return EXIT_FAILURE;
+	}
 
-	EXIT_ON_ERROR(hr);
-	SAFE_RELEASE(pEndpointVolume);
+	Configuration * config = new Configuration(L"config.xml");
 
-	SAFE_RELEASE(pEnumerator);
+	try {
+		config->Open();
+	} catch (LPWSTR reason) {
+		fwprintf(stderr, L"The configuration could not be opened.\n %s\n", reason);
+
+		delete config;
+
+		return EXIT_FAILURE;
+	}
+
+	LPWSTR defaultDeviceName = config->Read(L"device.default", NULL);
+	LPWSTR targetDeviceName = config->Read(L"device.alt", NULL);
+	LPWSTR programPath = config->Read(L"program", NULL);
+
+	delete config;
+
+	if (targetDeviceName == NULL) {
+		fwprintf(stderr, L"The secondary device is not configured.\n");
+
+		return EXIT_FAILURE;
+	}
+
+	if (programPath == NULL) {
+		fwprintf(stderr, L"The program path is not configured.\n");
+	
+		return EXIT_FAILURE;
+	}
+
+	LPWSTR currentDeviceId = GetAudioEndpointId(NULL);
+	LPWSTR defaultDeviceId = GetAudioEndpointId(defaultDeviceName);
+	LPWSTR targetDeviceId = GetAudioEndpointId(targetDeviceName);
+
+	if (defaultDeviceId == NULL) {
+		fwprintf(stderr, L"Could not find default device ID.\n");
+
+		return EXIT_FAILURE;
+	}
+
+	bool currentIsDefault = wcscmp(currentDeviceId, defaultDeviceId) == 0;
+
+	delete currentDeviceId;
+
+	if (!currentIsDefault) {
+		fwprintf(stderr, L"The current audio endpoint is not the default.\n");
+
+		return EXIT_FAILURE;
+	}
+
+	bool defaultIsTarget = wcscmp(defaultDeviceId, targetDeviceId) == 0;
+
+	if (defaultIsTarget) {
+		fwprintf(stderr, L"The current audio endpoint is the same as the target audio endpoint.\n");
+
+		return EXIT_FAILURE;
+	}
+
+	float originalVolume;
+	BOOL originalMute;
+
+	GetAudioEndpointVolume(defaultDeviceId, &originalVolume, &originalMute);
+	SetAudioEndpointVolume(defaultDeviceId, (float)0.0, TRUE);
+	SetDefaultAudioEndpoint(targetDeviceId);
+
+	// Sleep to prevent loud pop
+	Sleep(500);
+
+	SetAudioEndpointVolume(defaultDeviceId, (float)1.0, FALSE);
+
+	// Prevent accidental closure
+	HWND hWnd = GetConsoleWindow();
+	HMENU hMenu = GetSystemMenu(hWnd, FALSE);
+
+	EnableMenuItem(hMenu, SC_CLOSE, MF_BYCOMMAND | MF_DISABLED | MF_GRAYED);
+
+	// Launch program
+	try {
+		LaunchAndWait(programPath);
+	} catch (LPWSTR err) {
+		fwprintf(stderr, L"Error running program.\n %s\n", err);
+	}
+
+	// Restore
+	EnableMenuItem(hMenu, SC_CLOSE, MF_BYCOMMAND | MF_ENABLED);
+
+	SetAudioEndpointVolume(defaultDeviceId, originalVolume, originalMute);
+	SetDefaultAudioEndpoint(defaultDeviceId);
 
 	CoUninitialize();
 
-	EnableMenuItem(hMenu, SC_CLOSE, MF_BYCOMMAND | MF_ENABLED);
-
 	return EXIT_SUCCESS;
-
-	Exit:
-		printf("Error! System may be in an inconsistent state. Please check.\n");
-
-		CoTaskMemFree(pwszID);
-
-		SAFE_RELEASE(pEnumerator);
-		SAFE_RELEASE(pCollection);
-		SAFE_RELEASE(pEndpoint);
-		SAFE_RELEASE(pProps);
-
-		SAFE_RELEASE(pPolicyConfig);
-		SAFE_RELEASE(pEndpointVolume);
-
-		SAFE_RELEASE(pXMLDom);
-		SAFE_RELEASE(pXMLErr);
-		SAFE_RELEASE(pNode);
-		SAFE_RELEASE(pXMLNodeList);
-		
-		VariantClear(&varFileName);
-
-		SysFreeString(bstrErr);
-		SysFreeString(bstrQuery);
-
-		CoUninitialize();
-
-		EnableMenuItem(hMenu, SC_CLOSE, MF_BYCOMMAND | MF_ENABLED);
-
-		return EXIT_FAILURE;
 }
