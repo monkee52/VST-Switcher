@@ -271,6 +271,181 @@ class Configuration {
 
 		void Write(LPWSTR key, LPWSTR value) {
 			this->unsavedChanges = true;
+
+			DWORD queryLen = wcslen(key) + 27;
+			LPWSTR query = new WCHAR[queryLen];
+
+			_snwprintf(query, queryLen, L"/settings/setting[@key='%s']", key);
+
+			BSTR bstrQuery = SysAllocString(query);
+
+			delete query;
+
+			HRESULT hr = CHK_ALLOC(bstrQuery);
+
+			if (FAILED(hr)) {
+				throw ConvHrToWstr(hr);
+			}
+
+			IXMLDOMNode * pNode = NULL;
+			IXMLDOMNodeList * pXMLNodeList = NULL;
+
+			hr = this->pXMLDom->selectSingleNode(bstrQuery, &pNode);
+
+			SysFreeString(bstrQuery);
+
+			if (FAILED(hr)) {
+				throw ConvHrToWstr(hr);
+			}
+
+			if (pNode == NULL) {
+				IXMLDOMElement * pElement = NULL;
+
+				BSTR bstrName = SysAllocString(L"setting");
+
+				hr = this->pXMLDom->createElement(bstrName, &pElement);
+
+				SysFreeString(bstrName);
+
+				if (FAILED(hr)) {
+					throw ConvHrToWstr(hr);
+				}
+
+				IXMLDOMAttribute * pAttribute = NULL;
+
+				bstrName = SysAllocString(L"key");
+
+				hr = this->pXMLDom->createAttribute(bstrName, &pAttribute);
+
+				if (FAILED(hr)) {
+					SAFE_RELEASE(pElement);
+
+					SysFreeString(bstrName);
+
+					throw ConvHrToWstr(hr);
+				}
+
+				BSTR bstrValue = SysAllocString(value);
+				VARIANT varValue;
+
+				VariantInit(&varValue);
+				VariantFromString(value, varValue);
+
+				hr = pAttribute->put_value(varValue);
+
+				VariantClear(&varValue);
+				SysFreeString(bstrValue);
+
+				if (FAILED(hr)) {
+					SAFE_RELEASE(pElement);
+					SAFE_RELEASE(pAttribute);
+
+					throw ConvHrToWstr(hr);
+				}
+
+				IXMLDOMAttribute * pAttributeOut = NULL;
+
+				hr = pElement->setAttributeNode(pAttribute, &pAttributeOut);
+				
+				SAFE_RELEASE(pElement);
+				SAFE_RELEASE(pAttribute);
+				SAFE_RELEASE(pAttributeOut);
+
+				if (FAILED(hr)) {
+					throw ConvHrToWstr(hr);
+				}
+
+				IXMLDOMElement * pParent = NULL;
+
+				hr = this->pXMLDom->get_documentElement(&pParent);
+
+				if (FAILED(hr)) {
+					throw ConvHrToWstr(hr);
+				}
+
+				IXMLDOMNode * pChildOut;
+
+				hr = pParent->appendChild(pElement, &pChildOut);
+
+				SAFE_RELEASE(pElement);
+				SAFE_RELEASE(pChildOut);
+				SAFE_RELEASE(pParent);
+
+				if (FAILED(hr)) {
+					throw ConvHrToWstr(hr);
+				}
+
+				return;
+			}
+
+			hr = pNode->get_childNodes(&pXMLNodeList);
+
+			if (FAILED(hr)) {
+				SAFE_RELEASE(pNode);
+
+				throw ConvHrToWstr(hr);
+			}
+
+			long lCount;
+
+			hr = pXMLNodeList->get_length(&lCount);
+
+			if (FAILED(hr)) {
+				SAFE_RELEASE(pNode);
+				SAFE_RELEASE(pXMLNodeList);
+
+				throw ConvHrToWstr(hr);
+			}
+
+			if (lCount > 0) {
+				SAFE_RELEASE(pNode);
+
+				hr = pXMLNodeList->get_item(0, &pNode);
+
+				SAFE_RELEASE(pXMLNodeList);
+
+				if (FAILED(hr)) {
+					throw ConvHrToWstr(hr);
+				}
+
+				BSTR bstrNodeValue = SysAllocString(value);
+				
+				hr = pNode->put_text(bstrNodeValue);
+
+				SysFreeString(bstrNodeValue);
+
+				if (FAILED(hr)) {
+					throw ConvHrToWstr(hr);
+				}
+
+				SAFE_RELEASE(pNode);
+			} else {
+				SAFE_RELEASE(pXMLNodeList);
+
+				IXMLDOMText * pText = NULL;
+
+				BSTR bstrNodeValue = SysAllocString(value);
+
+				hr = this->pXMLDom->createTextNode(bstrNodeValue, &pText);
+
+				SysFreeString(bstrNodeValue);
+
+				if (FAILED(hr)) {
+					throw ConvHrToWstr(hr);
+				}
+
+				IXMLDOMNode * pChildOut = NULL;
+
+				hr = pNode->appendChild(pText, &pChildOut);
+
+				SAFE_RELEASE(pNode);
+				SAFE_RELEASE(pText);
+				SAFE_RELEASE(pChildOut);
+
+				if (FAILED(hr)) {
+					throw ConvHrToWstr(hr);
+				}
+			}
 		}
 };
 
