@@ -13,7 +13,7 @@
 #define SAFE_RELEASE(punk) if ((punk) != NULL) { (punk)->Release(); (punk) = NULL; }
 #define CHK_ALLOC(p) ((!(p)) ? E_OUTOFMEMORY : S_OK)
 
-#define PING wprintf(L"file: %s line: %d\n", __FILE__, __LINE__)
+#define PING() wprintf(L"file: %hs line: %d\n", __FILE__, __LINE__)
 
 HRESULT VariantFromString(PCWSTR wszValue, VARIANT &variant) {
 	HRESULT hr = S_OK;
@@ -738,6 +738,12 @@ int wmain(int argc, wchar_t * argv[]) {
 
 	if (defaultDeviceId == NULL) {
 		fwprintf(stderr, L"Could not find default device ID.\n");
+
+		return EXIT_FAILURE;
+	}
+
+	if (targetDeviceId == NULL) {
+		fwprintf(stderr, L"Could not find target device ID.\n");
 
 		return EXIT_FAILURE;
 	}
