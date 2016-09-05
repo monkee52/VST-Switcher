@@ -7,6 +7,7 @@
 #include <Functiondiscoverykeys_devpkey.h>
 #include <MsXml6.h>
 #include <comdef.h>
+#include <math.h>
 
 #include "PolicyConfig.h"
 
@@ -670,6 +671,8 @@ void GetAudioEndpointVolume(LPWSTR deviceId, float * volume, BOOL * mute) {
 }
 
 void SetAudioEndpointVolume(LPWSTR deviceId, float volume, BOOL mute) {
+	volume = max(0.0, min(1.0, volume));
+
 	RwAudioEndpointVolume(deviceId, TRUE, &volume, &mute);
 }
 
@@ -766,11 +769,17 @@ int wmain(int argc, wchar_t * argv[]) {
 		return EXIT_FAILURE;
 	}
 
-	float originalVolume;
-	BOOL originalMute;
+	float volume;
+	BOOL mute;
 
-	GetAudioEndpointVolume(defaultDeviceId, &originalVolume, &originalMute);
+	GetAudioEndpointVolume(defaultDeviceId, &volume, &mute);
 	SetAudioEndpointVolume(defaultDeviceId, (float)0.0, TRUE);
+
+	// Match volume
+	// TODO:
+	// * Custom functions
+	SetAudioEndpointVolume(targetDeviceId, (5.0 * log10(volume) + 10.0) / 13.0, mute);
+
 	SetDefaultAudioEndpoint(targetDeviceId);
 
 	// Sleep to prevent loud pop
@@ -794,7 +803,12 @@ int wmain(int argc, wchar_t * argv[]) {
 	// Restore
 	EnableMenuItem(hMenu, SC_CLOSE, MF_BYCOMMAND | MF_ENABLED);
 
-	SetAudioEndpointVolume(defaultDeviceId, originalVolume, originalMute);
+	// Match volume
+	// TODO:
+	// * Custom functions
+	GetAudioEndpointVolume(targetDeviceId, &volume, &mute);
+
+	SetAudioEndpointVolume(defaultDeviceId, pow(10.0, 13.0 * volume / 5.0 - 2.0), mute);
 	SetDefaultAudioEndpoint(defaultDeviceId);
 
 	CoUninitialize();
