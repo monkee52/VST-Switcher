@@ -1,6 +1,3 @@
-#define UNICODE
-#define _UNICODE
-
 #include <Windows.h>
 #include <endpointvolume.h>
 #include <mmdeviceapi.h>
@@ -11,7 +8,12 @@
 
 #include "PolicyConfig.h"
 
-#ifdef SPIDERMONKEY
+#ifdef USE_V8
+#include <libplatform/libplatform.h>
+#include <v8.h>
+#endif
+
+#ifdef USE_SPIDERMONKEY
 #include <jsapi.h>
 #include <js/Initialization.h>
 
@@ -731,200 +733,312 @@ int wmain(int argc, wchar_t * argv[]) {
 	LPWSTR targetDeviceName = config->Read(L"device.alt", NULL);
 	LPWSTR programPath = config->Read(L"program", NULL);
 
-#ifdef SPIDERMONKEY
-	bool canUseTransformCode = true;
+#ifdef USE_V8
+	char selfPath[4096];
 
-	LPWSTR transformCode = config->Read(L"transform", NULL);
+	WideCharToMultiByte(CP_UTF8, 0, argv[0], -1, (LPSTR)selfPath, 4096, NULL, NULL);
 
-	JSContext * cx;
-	JSCompartment * ac;
-	JS::RootedObject global(cx);
+	v8::V8::InitializeICUDefaultLocation(selfPath);
+	v8::V8::InitializeExternalStartupData(selfPath);
 
-	if (transformCode != NULL) {
-		JS_Init();
+	v8::Platform* platform = v8::platform::CreateDefaultPlatform();
 
-		cx = JS_NewContext(8L * 1024 * 1024);
+	v8::V8::InitializePlatform(platform);
+	v8::V8::Initialize();
 
-		if (!cx) {
-			fwprintf(stderr, L"Could not create SpiderMonkey context.");
+	v8::Isolate::CreateParams create_params;
+
+	create_params.array_buffer_allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
+
+	v8::Isolate* isolate = v8::Isolate::New(create_params);
+
+	{
+		v8::Isolate::Scope isolate_scope(isolate);
+		v8::HandleScope handle_scope(isolate);
+		v8::Local<v8::Context> context = v8::Context::New(isolate);
+		v8::Context::Scope context_scope(context);
+
+		LPWSTR transformCode = config->Read(L"transform", NULL);
+
+		bool canUseTransformCode = true;
+
+		if (transformCode != NULL) {
+			int transformCodeLen = WideCharToMultiByte(CP_UTF8, 0, transformCode, -1, NULL, 0, NULL, NULL);
+
+			char * transformCodeUtf8 = new char[transformCodeLen + 1];
+
+			WideCharToMultiByte(CP_UTF8, 0, transformCode, -1, (LPSTR)transformCodeUtf8, transformCodeLen + 1, NULL, NULL);
+
+			v8::Local<v8::String> source = v8::String::NewFromUtf8(isolate, (char *)transformCodeUtf8, v8::NewStringType::kNormal).ToLocalChecked();
+			v8::Local<v8::Script> script = v8::Script::Compile(context, source).ToLocalChecked();
+
+			delete transformCodeUtf8;
+
+			script->Run(context);
+
+			v8::Local<v8::Value> fnVal = context->Global()->Get(v8::String::NewFromUtf8(isolate, "forward", v8::NewStringType::kNormal).ToLocalChecked());
+			v8::Local<v8::Function> fn = v8::Local<v8::Function>::Cast(fnVal);
+
+			bool exists = fn != v8::Undefined(isolate) && fn != v8::Null(isolate);
+
+			canUseTransformCode = canUseTransformCode && exists;
+
+			fnVal = context->Global()->Get(v8::String::NewFromUtf8(isolate, "inverse", v8::NewStringType::kNormal).ToLocalChecked());
+			fn = v8::Local<v8::Function>::Cast(fnVal);
+
+			exists = fn != v8::Undefined(isolate) && fn != v8::Null(isolate);
+
+			canUseTransformCode = canUseTransformCode && exists;
+
+			if (!canUseTransformCode) {
+				isolate->Dispose();
+
+				v8::V8::Dispose();
+				v8::V8::ShutdownPlatform();
+
+				delete platform;
+				delete create_params.array_buffer_allocator;
+
+				fwprintf(stderr, L"Forward and/or inverse transform functions are not declared.");
+
+				return EXIT_FAILURE;
+			}
+		} else {
+			canUseTransformCode = false;
+		}
+#endif
+
+#ifdef USE_SPIDERMONKEY
+		bool canUseTransformCode = true;
+
+		LPWSTR transformCode = config->Read(L"transform", NULL);
+
+		JSContext * cx;
+		JSCompartment * ac;
+		JS::RootedObject global(cx);
+
+		if (transformCode != NULL) {
+			JS_Init();
+
+			cx = JS_NewContext(8L * 1024 * 1024);
+
+			if (!cx) {
+				fwprintf(stderr, L"Could not create SpiderMonkey context.");
+
+				return EXIT_FAILURE;
+			}
+
+			JS::CompartmentOptions compartmentOpts;
+
+			JS::InitSelfHostedCode(cx);
+
+			global.set(JS_NewGlobalObject(cx, &global_class, nullptr, JS::FireOnNewGlobalHook, compartmentOpts));
+
+			if (!global) {
+				JS_DestroyContext(cx);
+				JS_ShutDown();
+
+				fwprintf(stderr, L"Could not create JS global.");
+
+				return EXIT_FAILURE;
+			}
+
+			ac = JS_EnterCompartment(cx, global);
+
+			JS_InitStandardClasses(cx, global);
+
+			JS::CompileOptions compileOpts(cx, JSVERSION_LATEST);
+
+			compileOpts.setFileAndLine("noname", 0);
+
+			JS::RootedScript script(cx);
+
+			size_t bufferLen = WideCharToMultiByte(CP_UTF8, 0, transformCode, -1, NULL, 0, NULL, NULL);
+
+			LPSTR buffer = new CHAR[bufferLen + 1];
+
+			WideCharToMultiByte(CP_UTF8, 0, transformCode, -1, buffer, bufferLen + 1, NULL, NULL);
+
+			JS_CompileScript(cx, buffer, strnlen(buffer, bufferLen + 1), compileOpts, &script);
+
+			JS_ExecuteScript(cx, script);
+
+			bool fnExists = false;
+
+			JS_HasProperty(cx, global, "forward", &fnExists);
+
+			canUseTransformCode = canUseTransformCode && fnExists;
+
+			JS_HasProperty(cx, global, "inverse", &fnExists);
+
+			canUseTransformCode = canUseTransformCode && fnExists;
+
+			if (!canUseTransformCode) {
+				JS_LeaveCompartment(cx, ac);
+				JS_DestroyContext(cx);
+				JS_ShutDown();
+
+				fwprintf(stderr, L"Forward and/or inverse transform functions are not declared.");
+
+				return EXIT_FAILURE;
+			}
+		} else {
+			canUseTransformCode = false;
+		}
+#endif
+
+		delete config;
+
+		if (targetDeviceName == NULL) {
+			fwprintf(stderr, L"The secondary device is not configured.\n");
 
 			return EXIT_FAILURE;
 		}
 
-		JS::CompartmentOptions compartmentOpts;
-
-		JS::InitSelfHostedCode(cx);
-
-		global.set(JS_NewGlobalObject(cx, &global_class, nullptr, JS::FireOnNewGlobalHook, compartmentOpts));
-
-		if (!global) {
-			JS_DestroyContext(cx);
-			JS_ShutDown();
-
-			fwprintf(stderr, L"Could not create JS global.");
+		if (programPath == NULL) {
+			fwprintf(stderr, L"The program path is not configured.\n");
 
 			return EXIT_FAILURE;
 		}
 
-		ac = JS_EnterCompartment(cx, global);
+		LPWSTR currentDeviceId = GetAudioEndpointId(NULL);
+		LPWSTR defaultDeviceId = GetAudioEndpointId(defaultDeviceName);
+		LPWSTR targetDeviceId = GetAudioEndpointId(targetDeviceName);
 
-		JS_InitStandardClasses(cx, global);
-
-		JS::CompileOptions compileOpts(cx, JSVERSION_LATEST);
-
-		compileOpts.setFileAndLine("noname", 0);
-
-		JS::RootedScript script(cx);
-
-		size_t bufferLen = WideCharToMultiByte(CP_UTF8, 0, transformCode, -1, NULL, 0, NULL, NULL);
-
-		LPSTR buffer = new CHAR[bufferLen + 1];
-
-		WideCharToMultiByte(CP_UTF8, 0, transformCode, -1, buffer, bufferLen + 1, NULL, NULL);
-
-		JS_CompileScript(cx, buffer, strnlen(buffer, bufferLen + 1), compileOpts, &script);
-
-		JS_ExecuteScript(cx, script);
-
-		bool fnExists = false;
-
-		JS_HasProperty(cx, global, "forward", &fnExists);
-
-		canUseTransformCode = canUseTransformCode && fnExists;
-
-		JS_HasProperty(cx, global, "inverse", &fnExists);
-
-		canUseTransformCode = canUseTransformCode && fnExists;
-
-		if (!canUseTransformCode) {
-			JS_LeaveCompartment(cx, ac);
-			JS_DestroyContext(cx);
-			JS_ShutDown();
-
-			fwprintf(stderr, L"Forward and/or inverse transform functions are not declared.");
+		if (defaultDeviceId == NULL) {
+			fwprintf(stderr, L"Could not find default device ID.\n");
 
 			return EXIT_FAILURE;
 		}
-	} else {
-		canUseTransformCode = false;
-	}
+
+		if (targetDeviceId == NULL) {
+			fwprintf(stderr, L"Could not find target device ID.\n");
+
+			return EXIT_FAILURE;
+		}
+
+		bool currentIsDefault = wcscmp(currentDeviceId, defaultDeviceId) == 0;
+
+		delete currentDeviceId;
+
+		if (!currentIsDefault) {
+			fwprintf(stderr, L"The current audio endpoint is not the default.\n");
+
+			return EXIT_FAILURE;
+		}
+
+		bool defaultIsTarget = wcscmp(defaultDeviceId, targetDeviceId) == 0;
+
+		if (defaultIsTarget) {
+			fwprintf(stderr, L"The current audio endpoint is the same as the target audio endpoint.\n");
+
+			return EXIT_FAILURE;
+		}
+
+		float volume;
+		BOOL mute;
+
+		GetAudioEndpointVolume(defaultDeviceId, &volume, &mute);
+
+		// Match volume
+#ifdef USE_V8
+		if (canUseTransformCode) {
+			v8::Local<v8::Value> fnVal = context->Global()->Get(v8::String::NewFromUtf8(isolate, "forward", v8::NewStringType::kNormal).ToLocalChecked());
+			v8::Local<v8::Function> fn = v8::Local<v8::Function>::Cast(fnVal);
+
+			v8::Local<v8::Value> args[1];
+
+			args[0] = v8::Number::New(isolate, (double)volume);
+
+			volume = (float)fn->Call(context->Global(), 1, args)->ToNumber()->Value();
+		}
 #endif
 
-	delete config;
+#ifdef USE_SPIDERMONKEY
+		if (canUseTransformCode) {
+			JS::AutoValueArray<1> argv(cx);
 
-	if (targetDeviceName == NULL) {
-		fwprintf(stderr, L"The secondary device is not configured.\n");
+			argv[0].setNumber((double)volume);
 
-		return EXIT_FAILURE;
-	}
+			JS::RootedValue rval(cx);
 
-	if (programPath == NULL) {
-		fwprintf(stderr, L"The program path is not configured.\n");
-	
-		return EXIT_FAILURE;
-	}
+			JS_CallFunctionName(cx, global, "forward", argv, &rval);
 
-	LPWSTR currentDeviceId = GetAudioEndpointId(NULL);
-	LPWSTR defaultDeviceId = GetAudioEndpointId(defaultDeviceName);
-	LPWSTR targetDeviceId = GetAudioEndpointId(targetDeviceName);
-
-	if (defaultDeviceId == NULL) {
-		fwprintf(stderr, L"Could not find default device ID.\n");
-
-		return EXIT_FAILURE;
-	}
-
-	if (targetDeviceId == NULL) {
-		fwprintf(stderr, L"Could not find target device ID.\n");
-
-		return EXIT_FAILURE;
-	}
-
-	bool currentIsDefault = wcscmp(currentDeviceId, defaultDeviceId) == 0;
-
-	delete currentDeviceId;
-
-	if (!currentIsDefault) {
-		fwprintf(stderr, L"The current audio endpoint is not the default.\n");
-
-		return EXIT_FAILURE;
-	}
-
-	bool defaultIsTarget = wcscmp(defaultDeviceId, targetDeviceId) == 0;
-
-	if (defaultIsTarget) {
-		fwprintf(stderr, L"The current audio endpoint is the same as the target audio endpoint.\n");
-
-		return EXIT_FAILURE;
-	}
-
-	float volume;
-	BOOL mute;
-
-	GetAudioEndpointVolume(defaultDeviceId, &volume, &mute);
-
-	// Match volume
-#ifdef SPIDERMONKEY
-	if (canUseTransformCode) {
-		JS::AutoValueArray<1> argv(cx);
-
-		argv[0].setNumber((double)volume);
-
-		JS::RootedValue rval(cx);
-
-		JS_CallFunctionName(cx, global, "forward", argv, &rval);
-
-		volume = (float)rval.toDouble();
-	}
+			volume = (float)rval.toDouble();
+		}
 #endif
 
-	SetAudioEndpointVolume(defaultDeviceId, (float)0.0, TRUE);
-	SetAudioEndpointVolume(targetDeviceId, volume, mute);
+		SetAudioEndpointVolume(defaultDeviceId, (float)0.0, TRUE);
+		SetAudioEndpointVolume(targetDeviceId, volume, mute);
 
-	SetDefaultAudioEndpoint(targetDeviceId);
+		SetDefaultAudioEndpoint(targetDeviceId);
 
-	// Sleep to prevent loud pop
-	Sleep(500);
+		// Sleep to prevent loud pop
+		Sleep(500);
 
-	SetAudioEndpointVolume(defaultDeviceId, (float)1.0, FALSE);
+		SetAudioEndpointVolume(defaultDeviceId, (float)1.0, FALSE);
 
-	// Prevent accidental closure
-	HWND hWnd = GetConsoleWindow();
-	HMENU hMenu = GetSystemMenu(hWnd, FALSE);
+		// Prevent accidental closure
+		HWND hWnd = GetConsoleWindow();
+		HMENU hMenu = GetSystemMenu(hWnd, FALSE);
 
-	EnableMenuItem(hMenu, SC_CLOSE, MF_BYCOMMAND | MF_DISABLED | MF_GRAYED);
+		EnableMenuItem(hMenu, SC_CLOSE, MF_BYCOMMAND | MF_DISABLED | MF_GRAYED);
 
-	// Launch program
-	try {
-		LaunchAndWait(programPath);
-	} catch (LPWSTR err) {
-		fwprintf(stderr, L"Error running program.\n %s\n", err);
-	}
+		// Launch program
+		try {
+			LaunchAndWait(programPath);
+		} catch (LPWSTR err) {
+			fwprintf(stderr, L"Error running program.\n %s\n", err);
+		}
 
-	// Restore
-	EnableMenuItem(hMenu, SC_CLOSE, MF_BYCOMMAND | MF_ENABLED);
+		// Restore
+		EnableMenuItem(hMenu, SC_CLOSE, MF_BYCOMMAND | MF_ENABLED);
 
-	// Match volume
-	GetAudioEndpointVolume(targetDeviceId, &volume, &mute);
+		// Match volume
+		GetAudioEndpointVolume(targetDeviceId, &volume, &mute);
 
-#ifdef SPIDERMONKEY
-	if (canUseTransformCode) {
-		JS::AutoValueArray<1> argv(cx);
+#ifdef USE_V8
+		if (canUseTransformCode) {
+			v8::Local<v8::Value> fnVal = context->Global()->Get(v8::String::NewFromUtf8(isolate, "inverse", v8::NewStringType::kNormal).ToLocalChecked());
+			v8::Local<v8::Function> fn = v8::Local<v8::Function>::Cast(fnVal);
 
-		argv[0].setNumber((double)volume);
+			v8::Local<v8::Value> args[1];
 
-		JS::RootedValue rval(cx);
+			args[0] = v8::Number::New(isolate, (double)volume);
 
-		JS_CallFunctionName(cx, global, "inverse", argv, &rval);
-
-		volume = (float)rval.toDouble();
-	}
+			volume = (float)fn->Call(context->Global(), 1, args)->ToNumber()->Value();
+		}
 #endif
 
-	SetAudioEndpointVolume(defaultDeviceId, volume, mute);
-	SetDefaultAudioEndpoint(defaultDeviceId);
+#ifdef USE_SPIDERMONKEY
+		if (canUseTransformCode) {
+			JS::AutoValueArray<1> argv(cx);
 
-#ifdef SPIDERMONKEY
+			argv[0].setNumber((double)volume);
+
+			JS::RootedValue rval(cx);
+
+			JS_CallFunctionName(cx, global, "inverse", argv, &rval);
+
+			volume = (float)rval.toDouble();
+		}
+#endif
+
+		SetAudioEndpointVolume(defaultDeviceId, volume, mute);
+		SetDefaultAudioEndpoint(defaultDeviceId);
+
+#ifdef USE_V8
+	}
+	isolate->Dispose();
+
+	v8::V8::Dispose();
+	v8::V8::ShutdownPlatform();
+
+	delete platform;
+	delete create_params.array_buffer_allocator;
+#endif
+
+#ifdef USE_SPIDERMONKEY
 	if (canUseTransformCode) {
 		JS_LeaveCompartment(cx, ac);
 		JS_DestroyContext(cx);
