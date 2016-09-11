@@ -18,7 +18,7 @@ namespace VST {
             CodeDomProvider compiler = CodeDomProvider.CreateProvider("JScript");
 
             CompilerParameters options = new CompilerParameters() {
-                GenerateInMemory = false
+                GenerateInMemory = true
             };
 
             string newCode = "package VST { class TransformCode { public static function GetUserTransformCode() : Object {\n" + code + "\n return { \"forward\": forward, \"inverse\": inverse }; } } }";
