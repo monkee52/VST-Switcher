@@ -4,14 +4,49 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace VST {
-    static class Transform {
-        static public float Forward(float x) {
-            return (float)((5.0d * Math.Log10(x) + 10.0d) / 13.0d);
-        }
+using System.CodeDom.Compiler;
+using System.Reflection;
+using Microsoft.JScript;
+using System.Windows.Forms;
 
-        static public float Inverse(float x) {
-            return (float)Math.Pow(10, 13.0d * x / 5.0d - 2.0d);
+namespace VST {
+    public class Transform {
+        public Func<float, float> Forward;
+        public Func<float, float> Inverse;
+
+        static public Transform FromUserCode(string code) {
+            CodeDomProvider compiler = CodeDomProvider.CreateProvider("JScript");
+
+            CompilerParameters options = new CompilerParameters() {
+                GenerateInMemory = false
+            };
+
+            string newCode = "package VST { class TransformCode { public static function GetUserTransformCode() : Object {\n" + code + "\n return { \"forward\": forward, \"inverse\": inverse }; } } }";
+
+            CompilerResults results = compiler.CompileAssemblyFromSource(options, newCode);
+
+            if (results.Errors.Count > 0) {
+                foreach (CompilerError error in results.Errors) {
+                    MessageBox.Show(error.ToString(), "Compile error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+
+                return new Transform() {
+                    Forward = (float x) => x,
+                    Inverse = (float x) => x
+                };
+            }
+
+            Assembly userAssembly = results.CompiledAssembly;
+            Type userType = userAssembly.GetType("VST.TransformCode");
+
+            object instance = Activator.CreateInstance(userType);
+            
+            JSObject userTransformCode = (JSObject)userType.InvokeMember("GetUserTransformCode", BindingFlags.InvokeMethod, null, instance, null);
+
+            return new Transform() {
+                Forward = (float x) => (float)(double)((ScriptFunction)userTransformCode["forward"]).Invoke(null, (double)x),
+                Inverse = (float x) => (float)(double)((ScriptFunction)userTransformCode["inverse"]).Invoke(null, (double)x)
+            };
         }
     }
 }

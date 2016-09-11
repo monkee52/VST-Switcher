@@ -37,12 +37,14 @@ namespace VST {
             this.dlgExecutablePath = new System.Windows.Forms.OpenFileDialog();
             this.btnBrowse = new System.Windows.Forms.Button();
             this.label4 = new System.Windows.Forms.Label();
+            this.label5 = new System.Windows.Forms.Label();
+            this.txtTransform = new System.Windows.Forms.RichTextBox();
             this.SuspendLayout();
             // 
             // btnSave
             // 
             this.btnSave.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.btnSave.Location = new System.Drawing.Point(336, 105);
+            this.btnSave.Location = new System.Drawing.Point(336, 361);
             this.btnSave.Margin = new System.Windows.Forms.Padding(3, 7, 3, 7);
             this.btnSave.Name = "btnSave";
             this.btnSave.Size = new System.Drawing.Size(75, 23);
@@ -54,7 +56,7 @@ namespace VST {
             // btnCancel
             // 
             this.btnCancel.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this.btnCancel.Location = new System.Drawing.Point(417, 105);
+            this.btnCancel.Location = new System.Drawing.Point(417, 361);
             this.btnCancel.Margin = new System.Windows.Forms.Padding(3, 7, 3, 7);
             this.btnCancel.Name = "btnCancel";
             this.btnCancel.Size = new System.Drawing.Size(75, 23);
@@ -138,11 +140,32 @@ namespace VST {
             this.label4.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.label4.BorderStyle = System.Windows.Forms.BorderStyle.Fixed3D;
-            this.label4.Location = new System.Drawing.Point(0, 96);
+            this.label4.Location = new System.Drawing.Point(0, 352);
             this.label4.Margin = new System.Windows.Forms.Padding(3, 7, 3, 0);
             this.label4.Name = "label4";
             this.label4.Size = new System.Drawing.Size(505, 2);
             this.label4.TabIndex = 9;
+            // 
+            // label5
+            // 
+            this.label5.AutoSize = true;
+            this.label5.Location = new System.Drawing.Point(12, 94);
+            this.label5.Name = "label5";
+            this.label5.Size = new System.Drawing.Size(82, 13);
+            this.label5.TabIndex = 11;
+            this.label5.Text = "Transform Code";
+            // 
+            // txtTransform
+            // 
+            this.txtTransform.AcceptsTab = true;
+            this.txtTransform.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.txtTransform.Font = new System.Drawing.Font("Courier New", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.txtTransform.Location = new System.Drawing.Point(126, 91);
+            this.txtTransform.Name = "txtTransform";
+            this.txtTransform.Size = new System.Drawing.Size(366, 251);
+            this.txtTransform.TabIndex = 12;
+            this.txtTransform.Text = "";
+            this.txtTransform.WordWrap = false;
             // 
             // Configuration
             // 
@@ -150,7 +173,9 @@ namespace VST {
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.AutoSize = true;
             this.AutoSizeMode = System.Windows.Forms.AutoSizeMode.GrowAndShrink;
-            this.ClientSize = new System.Drawing.Size(502, 220);
+            this.ClientSize = new System.Drawing.Size(502, 412);
+            this.Controls.Add(this.txtTransform);
+            this.Controls.Add(this.label5);
             this.Controls.Add(this.label4);
             this.Controls.Add(this.btnBrowse);
             this.Controls.Add(this.label3);
@@ -187,5 +212,7 @@ namespace VST {
         private System.Windows.Forms.OpenFileDialog dlgExecutablePath;
         private System.Windows.Forms.Button btnBrowse;
         private System.Windows.Forms.Label label4;
+        private System.Windows.Forms.Label label5;
+        private System.Windows.Forms.RichTextBox txtTransform;
     }
 }

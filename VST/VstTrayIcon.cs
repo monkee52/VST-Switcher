@@ -82,10 +82,12 @@ namespace VST {
                 }
             }
 
+            Transform transform = Transform.FromUserCode(Settings.Default.Transform);
+
             float volume = currentEndpoint.GetVolume();
             bool mute = currentEndpoint.GetMute();
 
-            targetEndpoint.SetVolume(Transform.Forward(volume));
+            targetEndpoint.SetVolume(transform.Forward(volume));
             targetEndpoint.SetMute(mute);
 
             this.controller.SetDefaultAudioEndpoint(targetEndpoint);
@@ -97,7 +99,7 @@ namespace VST {
                 volume = targetEndpoint.GetVolume();
                 mute = targetEndpoint.GetMute();
 
-                currentEndpoint.SetVolume(Transform.Inverse(volume));
+                currentEndpoint.SetVolume(transform.Inverse(volume));
                 currentEndpoint.SetMute(mute);
 
                 this.controller.SetDefaultAudioEndpoint(currentEndpoint);

@@ -11,5 +11,15 @@
     <Setting Name="ExecutablePath" Type="System.String" Scope="User">
       <Value Profile="(Default)" />
     </Setting>
+    <Setting Name="Transform" Type="System.String" Scope="User">
+      <Value Profile="(Default)">function forward(x) {
+    return x;
+}
+
+function inverse(x) {
+    return x;
+}
+</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

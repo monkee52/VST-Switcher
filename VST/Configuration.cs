@@ -36,6 +36,7 @@ namespace VST {
             }
 
             this.txtExecutablePath.Text = Settings.Default.ExecutablePath;
+            this.txtTransform.Text = Settings.Default.Transform;
         }
 
         private void btnBrowse_Click(object sender, EventArgs e) {
@@ -46,16 +47,18 @@ namespace VST {
 
         private bool HasUnsavedChanges() {
             return (
-                Settings.Default.DefaultDeviceName != ((Endpoint)comboDefaultDevice.SelectedItem).Name
-                || Settings.Default.TargetDeviceName != ((Endpoint)comboTargetDevice.SelectedItem).Name
-                || Settings.Default.ExecutablePath != txtExecutablePath.Text
+                Settings.Default.DefaultDeviceName != ((Endpoint)this.comboDefaultDevice.SelectedItem).Name
+                || Settings.Default.TargetDeviceName != ((Endpoint)this.comboTargetDevice.SelectedItem).Name
+                || Settings.Default.ExecutablePath != this.txtExecutablePath.Text
+                || Settings.Default.Transform != this.txtTransform.Text
             );
         }
 
         private void Save() {
-            Settings.Default.DefaultDeviceName = ((Endpoint)comboDefaultDevice.SelectedItem).Name;
-            Settings.Default.TargetDeviceName = ((Endpoint)comboTargetDevice.SelectedItem).Name;
-            Settings.Default.ExecutablePath = txtExecutablePath.Text;
+            Settings.Default.DefaultDeviceName = ((Endpoint)this.comboDefaultDevice.SelectedItem).Name;
+            Settings.Default.TargetDeviceName = ((Endpoint)this.comboTargetDevice.SelectedItem).Name;
+            Settings.Default.ExecutablePath = this.txtExecutablePath.Text;
+            Settings.Default.Transform = this.txtTransform.Text;
 
             Settings.Default.Save();
         }

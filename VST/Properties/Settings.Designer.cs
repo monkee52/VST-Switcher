@@ -58,5 +58,18 @@ namespace VST.Properties {
                 this["ExecutablePath"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("function forward(x) {\r\n    return x;\r\n}\r\n\r\nfunction inverse(x) {\r\n    return x;\r\n" +
+            "}\r\n")]
+        public string Transform {
+            get {
+                return ((string)(this["Transform"]));
+            }
+            set {
+                this["Transform"] = value;
+            }
+        }
     }
 }
