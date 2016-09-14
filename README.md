@@ -1,13 +1,10 @@
 # VST
 
-Switches the default audio device and launches a program.
-Upon termination of the program, restores the audio device and volume.
+A utility to change the default Windows audio device while a user-define program is running.
 
 ## Configuration
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<settings>
-  <setting key="device.alt">[Name of audio device]</setting>
-  <setting key="program">[Name of program to launch]</setting>
-</settings>
-```
+Configuration is set during the first run of the program, and may be changed by right-clicking
+the tray-icon and pressing configure.
+
+You may optionally set two Javascript transform functions to set and restore the volumes of the
+audio devices. By default, the functions provided do a one to one mapping.
