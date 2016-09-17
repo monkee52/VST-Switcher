@@ -12,10 +12,70 @@ namespace VST {
 			if (FAILED(hr)) {
 				throw gcnew ApplicationException(String::Format(gcnew String(_T("Could not initialize COM: {0}")), ConvertHrToString(hr)));
 			}
+
+			GCHandle^ hThis = GCHandle::Alloc(this, GCHandleType::Weak);
+
+			this->notificationClient = new CMMNotificationClient(hThis);
+
+			CComPtr<IMMDeviceEnumerator> pEnumerator = nullptr;
+
+			hr = pEnumerator.CoCreateInstance(__uuidof(MMDeviceEnumerator));
+
+			if (FAILED(hr)) {
+				throw gcnew ApplicationException(ConvertHrToString(hr));
+			}
+
+			hr = pEnumerator->RegisterEndpointNotificationCallback(this->notificationClient);
+
+			if (FAILED(hr)) {
+				throw gcnew ApplicationException(ConvertHrToString(hr));
+			}
 		}
 
 		Controller::~Controller() {
+			CComPtr<IMMDeviceEnumerator> pEnumerator = nullptr;
+
+			HRESULT hr = pEnumerator.CoCreateInstance(__uuidof(MMDeviceEnumerator));
+
+			if (FAILED(hr)) {
+				throw gcnew ApplicationException(ConvertHrToString(hr));
+			}
+
+			hr = pEnumerator->UnregisterEndpointNotificationCallback(this->notificationClient);
+
+			if (FAILED(hr)) {
+				throw gcnew ApplicationException(ConvertHrToString(hr));
+			}
+
+			if (this->notificationClient != nullptr) {
+				this->notificationClient->Release();
+			}
+
 			CoUninitialize();
+		}
+
+		Controller::!Controller() {
+			delete this;
+		}
+
+		void Controller::FireDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDefaultDevice) {
+			this->OnDefaultDeviceChanged(gcnew Endpoint(this, gcnew String(pwstrDefaultDevice)), nullptr);
+		}
+
+		void Controller::FireDeviceAdded(LPCWSTR pwstrDeviceId) {
+			this->OnDeviceAdded(gcnew Endpoint(this, gcnew String(pwstrDeviceId)), nullptr);
+		}
+
+		void Controller::FireDeviceRemoved(LPCWSTR pwstrDeviceId) {
+			this->OnDeviceRemoved(gcnew Endpoint(this, gcnew String(pwstrDeviceId)), nullptr);
+		}
+
+		void Controller::FireDeviceStateChanged(LPCWSTR pwstrDeviceId, DWORD dwNewState) {
+			this->OnDeviceStateChanged(gcnew Endpoint(this, gcnew String(pwstrDeviceId)), nullptr);
+		}
+
+		void Controller::FirePropertyValueChanged(LPCWSTR pwstrDeviceId, const PROPERTYKEY key) {
+			this->OnPropertyValueChanged(gcnew Endpoint(this, gcnew String(pwstrDeviceId)), nullptr);
 		}
 
 		array<Endpoint^>^ Controller::GetAudioEndpoints() {
@@ -54,22 +114,26 @@ namespace VST {
 					throw gcnew ApplicationException(ConvertHrToString(hr));
 				}
 
-				LPWSTR wszId = nullptr;
+				LPWSTR pwszId = nullptr;
 
-				hr = pEndpoint->GetId(&wszId);
+				hr = pEndpoint->GetId(&pwszId);
 
 				if (FAILED(hr)) {
 					throw gcnew ApplicationException(ConvertHrToString(hr));
 				}
 
-				String^ id = gcnew String(wszId);
+				String^ id = gcnew String(pwszId);
 
-				CoTaskMemFree(wszId);
+				CoTaskMemFree(pwszId);
 
 				endpoints[i] = gcnew Endpoint(this, id);
 			}
 
 			return endpoints;
+		}
+
+		Endpoint^ Controller::GetAudioEndpoint(String^ id) {
+			return gcnew Endpoint(this, id);
 		}
 
 		Endpoint^ Controller::GetDefaultAudioEndpoint() {
@@ -89,17 +153,17 @@ namespace VST {
 				throw gcnew ApplicationException(ConvertHrToString(hr));
 			}
 
-			LPWSTR wszId = nullptr;
+			LPWSTR pwszId = nullptr;
 
-			hr = pEndpoint->GetId(&wszId);
+			hr = pEndpoint->GetId(&pwszId);
 
 			if (FAILED(hr)) {
 				throw gcnew ApplicationException(ConvertHrToString(hr));
 			}
 
-			String^ id = gcnew String(wszId);
+			String^ id = gcnew String(pwszId);
 
-			CoTaskMemFree(wszId);
+			CoTaskMemFree(pwszId);
 
 			return gcnew Endpoint(this, id);
 		}
@@ -114,9 +178,9 @@ namespace VST {
 			}
 
 			IntPtr hId = Marshal::StringToHGlobalUni(endpoint->Id);
-			LPWSTR wszId = (LPWSTR)hId.ToPointer();
+			LPWSTR pwszId = (LPWSTR)hId.ToPointer();
 
-			hr = pPolicyConfig->SetDefaultEndpoint(wszId, eMultimedia);
+			hr = pPolicyConfig->SetDefaultEndpoint(pwszId, eMultimedia);
 
 			Marshal::FreeHGlobal(hId);
 

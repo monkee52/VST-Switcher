@@ -3,10 +3,30 @@
 #pragma once
 
 using namespace System;
+using namespace System::Runtime::InteropServices;
 
 namespace VST {
 	namespace Audio {
 		ref class Controller;
+
+		private class CMMNotificationClient : public IMMNotificationClient {
+		private:
+			LONG _cRef;
+			gcroot<GCHandle^> hController;
+		public:
+			CMMNotificationClient(GCHandle^ hController);
+			~CMMNotificationClient();
+
+			ULONG STDMETHODCALLTYPE AddRef();
+			ULONG STDMETHODCALLTYPE Release();
+			HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, VOID ** ppvInterface);
+
+			HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDefaultDevice);
+			HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR pwstrDeviceId);
+			HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR pwstrDeviceId);
+			HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR pwstrDeviceId, DWORD dwNewState);
+			HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR pwstrDeviceId, const PROPERTYKEY key);
+		};
 
 		/// <summary>
 		/// Represents an audio endpoint
@@ -74,16 +94,38 @@ namespace VST {
 			virtual String^ ToString() override;
 		};
 
-		public ref class Controller {
+		public ref class Controller : public IDisposable {
+		private:
+			CMMNotificationClient* notificationClient;
+		internal:
+			void FireDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDefaultDevice);
+			void FireDeviceAdded(LPCWSTR pwstrDeviceId);
+			void FireDeviceRemoved(LPCWSTR pwstrDeviceId);
+			void FireDeviceStateChanged(LPCWSTR pwstrDeviceId, DWORD dwNewState);
+			void FirePropertyValueChanged(LPCWSTR pwstrDeviceId, const PROPERTYKEY key);
 		public:
 			Controller();
 			~Controller();
+			!Controller();
+
+			event EventHandler^ OnDefaultDeviceChanged;
+			event EventHandler^ OnDeviceAdded;
+			event EventHandler^ OnDeviceRemoved;
+			event EventHandler^ OnDeviceStateChanged;
+			event EventHandler^ OnPropertyValueChanged;
 
 			/// <summary>
 			/// Gets all the render audio endpoints currently enabled on the system
 			/// </summary>
 			/// <returns>The endpoints</returns>
 			array<Endpoint^>^ GetAudioEndpoints();
+
+			/// <summary>
+			/// Gets an audio endpoint by id
+			/// </summary>
+			/// <param name="id">The endpoint id</param>
+			/// <returns>The endpoint</returns>
+			Endpoint^ GetAudioEndpoint(String^ id);
 
 			/// <summary>
 			/// Gets the current default render endpoint
