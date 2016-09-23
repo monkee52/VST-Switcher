@@ -13,10 +13,6 @@ namespace VST {
 				throw gcnew ApplicationException(String::Format(gcnew String(_T("Could not initialize COM: {0}")), ConvertHrToString(hr)));
 			}
 
-			GCHandle^ hThis = GCHandle::Alloc(this, GCHandleType::Weak);
-
-			this->notificationClient = new CMMNotificationClient(hThis);
-
 			CComPtr<IMMDeviceEnumerator> pEnumerator = nullptr;
 
 			hr = pEnumerator.CoCreateInstance(__uuidof(MMDeviceEnumerator));
@@ -24,6 +20,10 @@ namespace VST {
 			if (FAILED(hr)) {
 				throw gcnew ApplicationException(ConvertHrToString(hr));
 			}
+
+			GCHandle^ hThis = GCHandle::Alloc(this, GCHandleType::Weak);
+
+			this->notificationClient = new CMMNotificationClient(hThis);
 
 			hr = pEnumerator->RegisterEndpointNotificationCallback(this->notificationClient);
 
@@ -59,23 +59,23 @@ namespace VST {
 		}
 
 		void Controller::FireDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDefaultDevice) {
-			this->OnDefaultDeviceChanged(gcnew Endpoint(this, gcnew String(pwstrDefaultDevice)), nullptr);
+			//this->OnDefaultDeviceChanged(gcnew Endpoint(this, gcnew String(pwstrDefaultDevice)), nullptr);
 		}
 
 		void Controller::FireDeviceAdded(LPCWSTR pwstrDeviceId) {
-			this->OnDeviceAdded(gcnew Endpoint(this, gcnew String(pwstrDeviceId)), nullptr);
+			this->OnEndpointAdded(gcnew Endpoint(this, gcnew String(pwstrDeviceId)), nullptr);
 		}
 
 		void Controller::FireDeviceRemoved(LPCWSTR pwstrDeviceId) {
-			this->OnDeviceRemoved(gcnew Endpoint(this, gcnew String(pwstrDeviceId)), nullptr);
+			this->OnEndpointRemoved(gcnew Endpoint(this, gcnew String(pwstrDeviceId)), nullptr);
 		}
 
 		void Controller::FireDeviceStateChanged(LPCWSTR pwstrDeviceId, DWORD dwNewState) {
-			this->OnDeviceStateChanged(gcnew Endpoint(this, gcnew String(pwstrDeviceId)), nullptr);
+			//this->OnDeviceStateChanged(gcnew Endpoint(this, gcnew String(pwstrDeviceId)), nullptr);
 		}
 
 		void Controller::FirePropertyValueChanged(LPCWSTR pwstrDeviceId, const PROPERTYKEY key) {
-			this->OnPropertyValueChanged(gcnew Endpoint(this, gcnew String(pwstrDeviceId)), nullptr);
+			//this->OnPropertyValueChanged(gcnew Endpoint(this, gcnew String(pwstrDeviceId)), nullptr);
 		}
 
 		array<Endpoint^>^ Controller::GetAudioEndpoints() {

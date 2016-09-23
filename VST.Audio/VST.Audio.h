@@ -7,6 +7,14 @@ using namespace System::Runtime::InteropServices;
 
 namespace VST {
 	namespace Audio {
+		[Flags]
+		public enum class EndpointState : DWORD {
+			Active = DEVICE_STATE_ACTIVE,
+			Disabled = DEVICE_STATE_DISABLED,
+			NotPresent = DEVICE_STATE_NOTPRESENT,
+			Unplugged = DEVICE_STATE_UNPLUGGED
+		};
+
 		ref class Controller;
 
 		private class CMMNotificationClient : public IMMNotificationClient {
@@ -49,9 +57,23 @@ namespace VST {
 			};
 
 			/// <summary>
-			/// Gets the friendly name of the endpoint
+			/// Gets the name of the endpoint. e.g. "XYZ Audio Adapter"
 			/// </summary>
 			property String^ Name {
+				String^ get();
+			}
+
+			/// <summary>
+			/// Gets the description of the endpoint. e.g. "Speakers (XYZ Audio Adapter)"
+			/// </summary>
+			property String^ FriendlyName {
+				String^ get();
+			}
+
+			/// <summary>
+			/// Gets the description of the endpoint. e.g. "Speakers"
+			/// </summary>
+			property String^ Description {
 				String^ get();
 			}
 
@@ -63,28 +85,27 @@ namespace VST {
 			};
 
 			/// <summary>
-			/// Gets the current volume of the endpoint
+			/// Gets the current state of the endpoint
 			/// </summary>
-			/// <returns>The volume</returns>
-			float GetVolume();
+			property EndpointState State {
+				EndpointState get();
+			}
 
 			/// <summary>
-			/// Sets the volume of the endpoint
+			/// Gets or sets the volume of the endpoint
 			/// </summary>
-			/// <param name="volume">The volume</param>
-			void SetVolume(float volume);
+			property float Volume {
+				float get();
+				void set(float volume);
+			}
 
 			/// <summary>
-			/// Gets the current mute status of the endpoint
+			/// Gets or sets the mute status of the endpoint
 			/// </summary>
-			/// <returns>The mute status</returns>
-			bool GetMute();
-
-			/// <summary>
-			/// Sets the mute status of the endpoint
-			/// </summary>
-			/// <param name="mute">The mute status</param>
-			void SetMute(bool mute);
+			property bool Muted {
+				bool get();
+				void set(bool mute);
+			}
 
 			virtual bool Equals(Object^ otherEndpoint) override;
 			virtual bool Equals(Endpoint^ otherEndpoint);
@@ -108,11 +129,11 @@ namespace VST {
 			~Controller();
 			!Controller();
 
-			event EventHandler^ OnDefaultDeviceChanged;
-			event EventHandler^ OnDeviceAdded;
-			event EventHandler^ OnDeviceRemoved;
-			event EventHandler^ OnDeviceStateChanged;
-			event EventHandler^ OnPropertyValueChanged;
+			//event EventHandler^ OnDefaultDeviceChanged;
+			event EventHandler^ OnEndpointAdded;
+			event EventHandler^ OnEndpointRemoved;
+			//event EventHandler^ OnDeviceStateChanged;
+			//event EventHandler^ OnPropertyValueChanged;
 
 			/// <summary>
 			/// Gets all the render audio endpoints currently enabled on the system

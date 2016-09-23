@@ -53,11 +53,11 @@ namespace VST {
             Endpoint currentEndpoint = this.controller.GetDefaultAudioEndpoint();
 
             Endpoint defaultEndpoint = endpoints.First((Endpoint e) => {
-                return e.Name == Settings.Default.DefaultDeviceName;
+                return e.FriendlyName == Settings.Default.DefaultDeviceName;
             });
 
             Endpoint targetEndpoint = endpoints.First((Endpoint e) => {
-                return e.Name == Settings.Default.TargetDeviceName;
+                return e.FriendlyName == Settings.Default.TargetDeviceName;
             });
 
             string executablePath = Settings.Default.ExecutablePath;
@@ -84,23 +84,23 @@ namespace VST {
 
             Transform transform = Transform.FromUserCode(Settings.Default.Transform);
 
-            float volume = currentEndpoint.GetVolume();
-            bool mute = currentEndpoint.GetMute();
+            float volume = currentEndpoint.Volume;
+            bool muted = currentEndpoint.Muted;
 
-            targetEndpoint.SetVolume(transform.Forward(volume));
-            targetEndpoint.SetMute(mute);
+            targetEndpoint.Volume = transform.Forward(volume);
+            targetEndpoint.Muted = muted;
 
             this.controller.SetDefaultAudioEndpoint(targetEndpoint);
 
-            currentEndpoint.SetVolume(1.0f);
-            currentEndpoint.SetMute(false);
+            currentEndpoint.Volume = 1.0f;
+            currentEndpoint.Muted = false;
 
             Action<object, EventArgs> restoreDevice = (object sender, EventArgs e) => {
-                volume = targetEndpoint.GetVolume();
-                mute = targetEndpoint.GetMute();
+                volume = targetEndpoint.Volume;
+                muted = targetEndpoint.Muted;
 
-                currentEndpoint.SetVolume(transform.Inverse(volume));
-                currentEndpoint.SetMute(mute);
+                currentEndpoint.Volume = transform.Inverse(volume);
+                currentEndpoint.Muted = muted;
 
                 this.controller.SetDefaultAudioEndpoint(currentEndpoint);
             };

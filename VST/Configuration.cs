@@ -25,13 +25,13 @@ namespace VST {
                 this.comboDefaultDevice.SelectedItem = controller.GetDefaultAudioEndpoint();
             } else {
                 this.comboDefaultDevice.SelectedItem = endpoints.First((Endpoint e) => {
-                    return e.Name == Settings.Default.DefaultDeviceName;
+                    return e.FriendlyName == Settings.Default.DefaultDeviceName;
                 });
             }
 
             if (Settings.Default.TargetDeviceName.Trim().Length != 0) {
                 this.comboTargetDevice.SelectedItem = endpoints.First((Endpoint e) => {
-                    return e.Name == Settings.Default.TargetDeviceName;
+                    return e.FriendlyName == Settings.Default.TargetDeviceName;
                 });
             }
 
@@ -47,16 +47,16 @@ namespace VST {
 
         private bool HasUnsavedChanges() {
             return (
-                Settings.Default.DefaultDeviceName != ((Endpoint)this.comboDefaultDevice.SelectedItem).Name
-                || Settings.Default.TargetDeviceName != ((Endpoint)this.comboTargetDevice.SelectedItem).Name
+                Settings.Default.DefaultDeviceName != ((Endpoint)this.comboDefaultDevice.SelectedItem).FriendlyName
+                || Settings.Default.TargetDeviceName != ((Endpoint)this.comboTargetDevice.SelectedItem).FriendlyName
                 || Settings.Default.ExecutablePath != this.txtExecutablePath.Text
                 || Settings.Default.Transform != this.txtTransform.Text
             );
         }
 
         private void Save() {
-            Settings.Default.DefaultDeviceName = ((Endpoint)this.comboDefaultDevice.SelectedItem).Name;
-            Settings.Default.TargetDeviceName = ((Endpoint)this.comboTargetDevice.SelectedItem).Name;
+            Settings.Default.DefaultDeviceName = ((Endpoint)this.comboDefaultDevice.SelectedItem).FriendlyName;
+            Settings.Default.TargetDeviceName = ((Endpoint)this.comboTargetDevice.SelectedItem).FriendlyName;
             Settings.Default.ExecutablePath = this.txtExecutablePath.Text;
             Settings.Default.Transform = this.txtTransform.Text;
 

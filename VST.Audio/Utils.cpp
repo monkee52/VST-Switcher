@@ -8,7 +8,7 @@ String^ ConvertHrToString(HRESULT hr) {
 	_com_error err(hr);
 
 	LPTSTR text = (LPTSTR)err.ErrorMessage();
-	DWORD len = 13 + _tcslen(text);
+	size_t len = 13 + _tcslen(text);
 	LPTSTR result = new TCHAR[len];
 
 	_sntprintf(result, len, _T("%#010x: %s"), hr, text);
@@ -73,4 +73,57 @@ void VolumeCommon(String^ id, bool set, float* volume, bool* mute) {
 			throw gcnew ApplicationException(ConvertHrToString(hr));
 		}
 	}
+}
+
+String^ GetPropertyCommon(String^ id, const PROPERTYKEY key) {
+	CComPtr<IMMDeviceEnumerator> pEnumerator = nullptr;
+
+	HRESULT hr = pEnumerator.CoCreateInstance(__uuidof(MMDeviceEnumerator));
+
+	if (FAILED(hr)) {
+		throw gcnew ApplicationException(ConvertHrToString(hr));
+	}
+
+	CComPtr<IMMDevice> pEndpoint = nullptr;
+
+	IntPtr hId = Marshal::StringToHGlobalUni(id);
+	LPWSTR szId = (LPWSTR)hId.ToPointer();
+
+	hr = pEnumerator->GetDevice(szId, &pEndpoint);
+
+	Marshal::FreeHGlobal(hId);
+
+	if (FAILED(hr)) {
+		throw gcnew ApplicationException(ConvertHrToString(hr));
+	}
+
+	if (pEndpoint == nullptr) {
+		throw gcnew ApplicationException(String::Format(gcnew String(_T("Unable to find device {0}")), id));
+	}
+
+	CComPtr<IPropertyStore> pProps = nullptr;
+
+	hr = pEndpoint->OpenPropertyStore(STGM_READ, &pProps);
+
+	if (FAILED(hr)) {
+		throw gcnew ApplicationException(ConvertHrToString(hr));
+	}
+
+	PROPVARIANT varName;
+
+	PropVariantInit(&varName);
+
+	hr = pProps->GetValue(key, &varName);
+
+	if (FAILED(hr)) {
+		PropVariantClear(&varName);
+
+		throw gcnew ApplicationException(ConvertHrToString(hr));
+	}
+
+	String^ name = gcnew String(varName.pwszVal);
+
+	PropVariantClear(&varName);
+
+	return name;
 }

@@ -20,56 +20,15 @@ namespace VST {
 		}
 
 		String^ Endpoint::Name::get() {
-			CComPtr<IMMDeviceEnumerator> pEnumerator = nullptr;
+			return GetPropertyCommon(this->Id, PKEY_DeviceInterface_FriendlyName);
+		}
 
-			HRESULT hr = pEnumerator.CoCreateInstance(__uuidof(MMDeviceEnumerator));
+		String^ Endpoint::FriendlyName::get() {
+			return GetPropertyCommon(this->Id, PKEY_Device_FriendlyName);
+		}
 
-			if (FAILED(hr)) {
-				throw gcnew ApplicationException(ConvertHrToString(hr));
-			}
-
-			CComPtr<IMMDevice> pEndpoint = nullptr;
-
-			IntPtr hId = Marshal::StringToHGlobalUni(this->Id);
-			LPWSTR szId = (LPWSTR)hId.ToPointer();
-
-			hr = pEnumerator->GetDevice(szId, &pEndpoint);
-
-			Marshal::FreeHGlobal(hId);
-
-			if (FAILED(hr)) {
-				throw gcnew ApplicationException(ConvertHrToString(hr));
-			}
-
-			if (pEndpoint == nullptr) {
-				throw gcnew ApplicationException(String::Format(gcnew String(_T("Unable to find device {0}")), this->Id));
-			}
-
-			CComPtr<IPropertyStore> pProps = nullptr;
-
-			hr = pEndpoint->OpenPropertyStore(STGM_READ, &pProps);
-
-			if (FAILED(hr)) {
-				throw gcnew ApplicationException(ConvertHrToString(hr));
-			}
-
-			PROPVARIANT varName;
-
-			PropVariantInit(&varName);
-
-			hr = pProps->GetValue(PKEY_Device_FriendlyName, &varName);
-
-			if (FAILED(hr)) {
-				PropVariantClear(&varName);
-
-				throw gcnew ApplicationException(ConvertHrToString(hr));
-			}
-
-			String^ name = gcnew String(varName.pwszVal);
-
-			PropVariantClear(&varName);
-
-			return name;
+		String^ Endpoint::Description::get() {
+			return GetPropertyCommon(this->Id, PKEY_Device_DeviceDesc);
 		}
 
 		bool Endpoint::IsDefault::get() {
@@ -101,10 +60,43 @@ namespace VST {
 
 			CoTaskMemFree(wszId);
 
-			return bool(this->Id == defaultId);
+			return this->Id == defaultId;
 		}
 
-		float Endpoint::GetVolume() {
+		EndpointState Endpoint::State::get() {
+			CComPtr<IMMDeviceEnumerator> pEnumerator = nullptr;
+
+			HRESULT hr = pEnumerator.CoCreateInstance(__uuidof(MMDeviceEnumerator));
+
+			if (FAILED(hr)) {
+				throw gcnew ApplicationException(ConvertHrToString(hr));
+			}
+
+			CComPtr<IMMDevice> pEndpoint = nullptr;
+
+			IntPtr hId = Marshal::StringToHGlobalUni(this->Id);
+			LPWSTR pwstrId = (LPWSTR)hId.ToPointer();
+
+			hr = pEnumerator->GetDevice(pwstrId, &pEndpoint);
+
+			Marshal::FreeHGlobal(hId);
+
+			if (FAILED(hr)) {
+				throw gcnew ApplicationException(ConvertHrToString(hr));
+			}
+
+			DWORD dwState;
+
+			hr = pEndpoint->GetState(&dwState);
+
+			if (FAILED(hr)) {
+				throw gcnew ApplicationException(ConvertHrToString(hr));
+			}
+
+			return (EndpointState)dwState;
+		}
+
+		float Endpoint::Volume::get() {
 			float volume;
 
 			VolumeCommon(this->Id, false, &volume, nullptr);
@@ -112,21 +104,21 @@ namespace VST {
 			return volume;
 		}
 
-		void Endpoint::SetVolume(float volume) {
+		void Endpoint::Volume::set(float volume) {
 			volume = (volume < 0.0f ? 0.0f : (volume > 1.0f ? 1.0f : volume));
 
 			VolumeCommon(this->Id, true, &volume, nullptr);
 		}
 
-		bool Endpoint::GetMute() {
+		bool Endpoint::Muted::get() {
 			bool mute;
 
 			VolumeCommon(this->Id, false, nullptr, &mute);
 
-			return bool(mute);
+			return mute;
 		}
 
-		void Endpoint::SetMute(bool mute) {
+		void Endpoint::Muted::set(bool mute) {
 			VolumeCommon(this->Id, true, nullptr, &mute);
 		}
 

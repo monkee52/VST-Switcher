@@ -75,7 +75,7 @@ namespace VST {
             // 
             // comboDefaultDevice
             // 
-            this.comboDefaultDevice.DisplayMember = "Name";
+            this.comboDefaultDevice.DisplayMember = "FriendlyName";
             this.comboDefaultDevice.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.comboDefaultDevice.FormattingEnabled = true;
             this.comboDefaultDevice.Location = new System.Drawing.Point(126, 9);
@@ -86,7 +86,7 @@ namespace VST {
             // 
             // comboTargetDevice
             // 
-            this.comboTargetDevice.DisplayMember = "Name";
+            this.comboTargetDevice.DisplayMember = "FriendlyName";
             this.comboTargetDevice.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.comboTargetDevice.FormattingEnabled = true;
             this.comboTargetDevice.Location = new System.Drawing.Point(126, 36);
