@@ -8,11 +8,50 @@ using namespace System::Runtime::InteropServices;
 namespace VST {
 	namespace Audio {
 		[Flags]
-		public enum class EndpointState : DWORD {
+		public enum class DeviceState : DWORD {
 			Active = DEVICE_STATE_ACTIVE,
 			Disabled = DEVICE_STATE_DISABLED,
 			NotPresent = DEVICE_STATE_NOTPRESENT,
 			Unplugged = DEVICE_STATE_UNPLUGGED
+		};
+
+		public enum class DeviceType {
+			Render = eRender,
+			Capture = eCapture,
+			All = eAll
+		};
+
+		public enum class DeviceRole {
+			Console = eConsole,
+			Multimedia = eMultimedia,
+			Communications = eCommunications
+		};
+
+		public ref class DeviceStateChangedEventArgs : EventArgs {
+		private:
+			DeviceState _state;
+		public:
+			DeviceStateChangedEventArgs(DeviceState state);
+			
+			property DeviceState State {
+				DeviceState get();
+			}
+		};
+
+		public ref class DefaultDeviceChangedEventArgs : EventArgs {
+		private:
+			DeviceType _type;
+			DeviceRole _role;
+		public:
+			DefaultDeviceChangedEventArgs(DeviceType type, DeviceRole role);
+
+			property DeviceType Type {
+				DeviceType get();
+			}
+
+			property DeviceRole Role {
+				DeviceRole get();
+			}
 		};
 
 		ref class Controller;
@@ -39,12 +78,12 @@ namespace VST {
 		/// <summary>
 		/// Represents an audio endpoint
 		/// </summary>
-		public ref class Endpoint {
+		public ref class Device {
 		private:
 			Controller^ Utils;
 			String^ _id;
 		internal:
-			Endpoint(Controller^ utils, String^ Id);
+			Device(Controller^ utils, String^ Id);
 		public:
 			/// <summary>
 			/// Gets the system defined identifier for the endpoint
@@ -80,15 +119,16 @@ namespace VST {
 			/// <summary>
 			/// Gets whether the endpoint is the current default device
 			/// </summary>
-			property bool IsDefault {
-				bool get();
-			};
+			/// <param name="type">The type of the endpoint</param>
+			/// <param name="role">The role of the endpoint</param>
+			/// <returns>Whether the endpoint is the default for the type and role</returns>
+			bool IsDefault(DeviceType type, DeviceRole role);
 
 			/// <summary>
 			/// Gets the current state of the endpoint
 			/// </summary>
-			property EndpointState State {
-				EndpointState get();
+			property DeviceState State {
+				DeviceState get();
 			}
 
 			/// <summary>
@@ -107,11 +147,11 @@ namespace VST {
 				void set(bool mute);
 			}
 
-			virtual bool Equals(Object^ otherEndpoint) override;
-			virtual bool Equals(Endpoint^ otherEndpoint);
+			virtual bool Equals(Object^ otherDevice) override;
+			virtual bool Equals(Device^ otherDevice);
 			virtual int GetHashCode() override;
-			static bool operator!= (Endpoint^, Endpoint^);
-			static bool operator== (Endpoint^, Endpoint^);
+			static bool operator!= (Device^, Device^);
+			static bool operator== (Device^, Device^);
 			virtual String^ ToString() override;
 		};
 
@@ -129,36 +169,36 @@ namespace VST {
 			~Controller();
 			!Controller();
 
-			//event EventHandler^ OnDefaultDeviceChanged;
-			event EventHandler^ OnEndpointAdded;
-			event EventHandler^ OnEndpointRemoved;
-			//event EventHandler^ OnDeviceStateChanged;
+			event EventHandler<DefaultDeviceChangedEventArgs^>^ OnDefaultDeviceChanged;
+			event EventHandler^ OnDeviceAdded;
+			event EventHandler^ OnDeviceRemoved;
+			event EventHandler<DeviceStateChangedEventArgs^>^ OnDeviceStateChanged;
 			//event EventHandler^ OnPropertyValueChanged;
 
 			/// <summary>
 			/// Gets all the render audio endpoints currently enabled on the system
 			/// </summary>
 			/// <returns>The endpoints</returns>
-			array<Endpoint^>^ GetAudioEndpoints();
+			array<Device^>^ GetAudioDevices(DeviceType dataFlow, DeviceState stateMask);
 
 			/// <summary>
 			/// Gets an audio endpoint by id
 			/// </summary>
 			/// <param name="id">The endpoint id</param>
 			/// <returns>The endpoint</returns>
-			Endpoint^ GetAudioEndpoint(String^ id);
+			Device^ GetAudioDevice(String^ id);
 
 			/// <summary>
 			/// Gets the current default render endpoint
 			/// </summary>
 			/// <returns>The endpoint</returns>
-			Endpoint^ GetDefaultAudioEndpoint();
+			Device^ GetDefaultAudioDevice(DeviceType dataFlow, DeviceRole role);
 
 			/// <summary>
 			/// Sets the default render endpoint
 			/// </summary>
 			/// <param name="endpoint">The endpoint</param>
-			void SetDefaultAudioEndpoint(Endpoint^ endpoint);
+			void SetDefaultAudioDevice(Device^ endpoint, DeviceRole role);
 		};
 	}
 }

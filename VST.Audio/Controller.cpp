@@ -59,26 +59,26 @@ namespace VST {
 		}
 
 		void Controller::FireDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDefaultDevice) {
-			//this->OnDefaultDeviceChanged(gcnew Endpoint(this, gcnew String(pwstrDefaultDevice)), nullptr);
+			this->OnDefaultDeviceChanged(gcnew Device(this, gcnew String(pwstrDefaultDevice)), gcnew DefaultDeviceChangedEventArgs((DeviceType)flow, (DeviceRole)role));
 		}
 
 		void Controller::FireDeviceAdded(LPCWSTR pwstrDeviceId) {
-			this->OnEndpointAdded(gcnew Endpoint(this, gcnew String(pwstrDeviceId)), nullptr);
+			this->OnDeviceAdded(gcnew Device(this, gcnew String(pwstrDeviceId)), EventArgs::Empty);
 		}
 
 		void Controller::FireDeviceRemoved(LPCWSTR pwstrDeviceId) {
-			this->OnEndpointRemoved(gcnew Endpoint(this, gcnew String(pwstrDeviceId)), nullptr);
+			this->OnDeviceRemoved(gcnew Device(this, gcnew String(pwstrDeviceId)), EventArgs::Empty);
 		}
 
 		void Controller::FireDeviceStateChanged(LPCWSTR pwstrDeviceId, DWORD dwNewState) {
-			//this->OnDeviceStateChanged(gcnew Endpoint(this, gcnew String(pwstrDeviceId)), nullptr);
+			this->OnDeviceStateChanged(gcnew Device(this, gcnew String(pwstrDeviceId)), gcnew DeviceStateChangedEventArgs((DeviceState)dwNewState));
 		}
 
 		void Controller::FirePropertyValueChanged(LPCWSTR pwstrDeviceId, const PROPERTYKEY key) {
-			//this->OnPropertyValueChanged(gcnew Endpoint(this, gcnew String(pwstrDeviceId)), nullptr);
+			//this->OnPropertyValueChanged(gcnew Device(this, gcnew String(pwstrDeviceId)), nullptr);
 		}
 
-		array<Endpoint^>^ Controller::GetAudioEndpoints() {
+		array<Device^>^ Controller::GetAudioDevices(DeviceType type, DeviceState stateMask) {
 			CComPtr<IMMDeviceEnumerator> pEnumerator = nullptr;
 
 			HRESULT hr = pEnumerator.CoCreateInstance(__uuidof(MMDeviceEnumerator));
@@ -89,7 +89,7 @@ namespace VST {
 
 			CComPtr<IMMDeviceCollection> pCollection = nullptr;
 
-			hr = pEnumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pCollection);
+			hr = pEnumerator->EnumAudioEndpoints((EDataFlow)type, (DWORD)stateMask, &pCollection);
 
 			if (FAILED(hr)) {
 				throw gcnew ApplicationException(ConvertHrToString(hr));
@@ -103,12 +103,12 @@ namespace VST {
 				throw gcnew ApplicationException(ConvertHrToString(hr));
 			}
 
-			array<Endpoint^>^ endpoints = gcnew array<Endpoint^>(count);
+			array<Device^>^ endpoints = gcnew array<Device^>(count);
 
 			for (UINT i = 0; i < count; i++) {
-				CComPtr<IMMDevice> pEndpoint = nullptr;
+				CComPtr<IMMDevice> pDevice = nullptr;
 
-				hr = pCollection->Item(i, &pEndpoint);
+				hr = pCollection->Item(i, &pDevice);
 
 				if (FAILED(hr)) {
 					throw gcnew ApplicationException(ConvertHrToString(hr));
@@ -116,7 +116,7 @@ namespace VST {
 
 				LPWSTR pwszId = nullptr;
 
-				hr = pEndpoint->GetId(&pwszId);
+				hr = pDevice->GetId(&pwszId);
 
 				if (FAILED(hr)) {
 					throw gcnew ApplicationException(ConvertHrToString(hr));
@@ -126,17 +126,17 @@ namespace VST {
 
 				CoTaskMemFree(pwszId);
 
-				endpoints[i] = gcnew Endpoint(this, id);
+				endpoints[i] = gcnew Device(this, id);
 			}
 
 			return endpoints;
 		}
 
-		Endpoint^ Controller::GetAudioEndpoint(String^ id) {
-			return gcnew Endpoint(this, id);
+		Device^ Controller::GetAudioDevice(String^ id) {
+			return gcnew Device(this, id);
 		}
 
-		Endpoint^ Controller::GetDefaultAudioEndpoint() {
+		Device^ Controller::GetDefaultAudioDevice(DeviceType type, DeviceRole role) {
 			CComPtr<IMMDeviceEnumerator> pEnumerator = nullptr;
 
 			HRESULT hr = pEnumerator.CoCreateInstance(__uuidof(MMDeviceEnumerator));
@@ -145,9 +145,9 @@ namespace VST {
 				throw gcnew ApplicationException(ConvertHrToString(hr));
 			}
 
-			CComPtr<IMMDevice> pEndpoint = nullptr;
+			CComPtr<IMMDevice> pDevice = nullptr;
 
-			hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &pEndpoint);
+			hr = pEnumerator->GetDefaultAudioEndpoint((EDataFlow)type, (ERole)role, &pDevice);
 
 			if (FAILED(hr)) {
 				throw gcnew ApplicationException(ConvertHrToString(hr));
@@ -155,7 +155,7 @@ namespace VST {
 
 			LPWSTR pwszId = nullptr;
 
-			hr = pEndpoint->GetId(&pwszId);
+			hr = pDevice->GetId(&pwszId);
 
 			if (FAILED(hr)) {
 				throw gcnew ApplicationException(ConvertHrToString(hr));
@@ -165,10 +165,10 @@ namespace VST {
 
 			CoTaskMemFree(pwszId);
 
-			return gcnew Endpoint(this, id);
+			return gcnew Device(this, id);
 		}
 
-		void Controller::SetDefaultAudioEndpoint(Endpoint^ endpoint) {
+		void Controller::SetDefaultAudioDevice(Device^ endpoint, DeviceRole role) {
 			CComPtr<IPolicyConfigVista> pPolicyConfig = nullptr;
 
 			HRESULT hr = pPolicyConfig.CoCreateInstance(__uuidof(CPolicyConfigVistaClient));
@@ -180,7 +180,7 @@ namespace VST {
 			IntPtr hId = Marshal::StringToHGlobalUni(endpoint->Id);
 			LPWSTR pwszId = (LPWSTR)hId.ToPointer();
 
-			hr = pPolicyConfig->SetDefaultEndpoint(pwszId, eMultimedia);
+			hr = pPolicyConfig->SetDefaultEndpoint(pwszId, (ERole)role);
 
 			Marshal::FreeHGlobal(hId);
 

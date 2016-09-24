@@ -6,64 +6,36 @@ using namespace System::Runtime::InteropServices;
 
 namespace VST {
 	namespace Audio {
-		Endpoint::Endpoint(Controller^ utils, String^ id) {
+		Device::Device(Controller^ utils, String^ id) {
 			this->Utils = utils;
 			this->Id = id;
 		}
 
-		String^ Endpoint::Id::get() {
+		String^ Device::Id::get() {
 			return this->_id;
 		}
 
-		void Endpoint::Id::set(String^ id) {
+		void Device::Id::set(String^ id) {
 			this->_id = id;
 		}
 
-		String^ Endpoint::Name::get() {
+		String^ Device::Name::get() {
 			return GetPropertyCommon(this->Id, PKEY_DeviceInterface_FriendlyName);
 		}
 
-		String^ Endpoint::FriendlyName::get() {
+		String^ Device::FriendlyName::get() {
 			return GetPropertyCommon(this->Id, PKEY_Device_FriendlyName);
 		}
 
-		String^ Endpoint::Description::get() {
+		String^ Device::Description::get() {
 			return GetPropertyCommon(this->Id, PKEY_Device_DeviceDesc);
 		}
 
-		bool Endpoint::IsDefault::get() {
-			CComPtr<IMMDeviceEnumerator> pEnumerator = nullptr;
-
-			HRESULT hr = pEnumerator.CoCreateInstance(__uuidof(MMDeviceEnumerator));
-
-			if (FAILED(hr)) {
-				throw gcnew ApplicationException(ConvertHrToString(hr));
-			}
-
-			CComPtr<IMMDevice> pEndpoint = nullptr;
-
-			hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &pEndpoint);
-
-			if (FAILED(hr)) {
-				throw gcnew ApplicationException(ConvertHrToString(hr));
-			}
-
-			LPWSTR wszId = nullptr;
-
-			hr = pEndpoint->GetId(&wszId);
-
-			if (FAILED(hr)) {
-				throw gcnew ApplicationException(ConvertHrToString(hr));
-			}
-
-			String^ defaultId = gcnew String(wszId);
-
-			CoTaskMemFree(wszId);
-
-			return this->Id == defaultId;
+		bool Device::IsDefault(DeviceType type, DeviceRole role) {
+			return this->Utils->GetDefaultAudioDevice(type, role) == this;
 		}
 
-		EndpointState Endpoint::State::get() {
+		DeviceState Device::State::get() {
 			CComPtr<IMMDeviceEnumerator> pEnumerator = nullptr;
 
 			HRESULT hr = pEnumerator.CoCreateInstance(__uuidof(MMDeviceEnumerator));
@@ -72,12 +44,12 @@ namespace VST {
 				throw gcnew ApplicationException(ConvertHrToString(hr));
 			}
 
-			CComPtr<IMMDevice> pEndpoint = nullptr;
+			CComPtr<IMMDevice> pDevice = nullptr;
 
 			IntPtr hId = Marshal::StringToHGlobalUni(this->Id);
 			LPWSTR pwstrId = (LPWSTR)hId.ToPointer();
 
-			hr = pEnumerator->GetDevice(pwstrId, &pEndpoint);
+			hr = pEnumerator->GetDevice(pwstrId, &pDevice);
 
 			Marshal::FreeHGlobal(hId);
 
@@ -87,16 +59,16 @@ namespace VST {
 
 			DWORD dwState;
 
-			hr = pEndpoint->GetState(&dwState);
+			hr = pDevice->GetState(&dwState);
 
 			if (FAILED(hr)) {
 				throw gcnew ApplicationException(ConvertHrToString(hr));
 			}
 
-			return (EndpointState)dwState;
+			return (DeviceState)dwState;
 		}
 
-		float Endpoint::Volume::get() {
+		Single Device::Volume::get() {
 			float volume;
 
 			VolumeCommon(this->Id, false, &volume, nullptr);
@@ -104,13 +76,13 @@ namespace VST {
 			return volume;
 		}
 
-		void Endpoint::Volume::set(float volume) {
+		void Device::Volume::set(float volume) {
 			volume = (volume < 0.0f ? 0.0f : (volume > 1.0f ? 1.0f : volume));
 
 			VolumeCommon(this->Id, true, &volume, nullptr);
 		}
 
-		bool Endpoint::Muted::get() {
+		bool Device::Muted::get() {
 			bool mute;
 
 			VolumeCommon(this->Id, false, nullptr, &mute);
@@ -118,21 +90,21 @@ namespace VST {
 			return mute;
 		}
 
-		void Endpoint::Muted::set(bool mute) {
+		void Device::Muted::set(bool mute) {
 			VolumeCommon(this->Id, true, nullptr, &mute);
 		}
 
-		bool Endpoint::Equals(Object^ otherEndpoint) {
-			if (otherEndpoint == nullptr) {
+		bool Device::Equals(Object^ otherDevice) {
+			if (otherDevice == nullptr) {
 				return false;
 			}
 
-			Endpoint^ that = dynamic_cast<Endpoint^>(otherEndpoint);
+			Device^ that = dynamic_cast<Device^>(otherDevice);
 
 			return this->Id == that->Id;
 		}
 
-		bool Endpoint::Equals(Endpoint^ that) {
+		bool Device::Equals(Device^ that) {
 			if (that == nullptr) {
 				return false;
 			}
@@ -140,11 +112,11 @@ namespace VST {
 			return this->Id == that->Id;
 		}
 
-		bool Endpoint::operator!= (Endpoint^ a, Endpoint^ b) {
+		bool Device::operator!= (Device^ a, Device^ b) {
 			return !(a == b);
 		}
 
-		bool Endpoint::operator== (Endpoint^ a, Endpoint^ b) {
+		bool Device::operator== (Device^ a, Device^ b) {
 			if (Object::ReferenceEquals(a, b)) {
 				return true;
 			}
@@ -156,12 +128,12 @@ namespace VST {
 			return a->Id == b->Id;
 		}
 
-		int Endpoint::GetHashCode() {
+		int Device::GetHashCode() {
 			return this->ToString()->GetHashCode();
 		}
 
-		String^ Endpoint::ToString() {
-			return String::Format(gcnew String(_T("<#Endpoint({0})>")), this->Id);
+		String^ Device::ToString() {
+			return String::Format(gcnew String(_T("<#Device({0})>")), this->Id);
 		}
 	}
 }

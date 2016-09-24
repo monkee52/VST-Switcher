@@ -49,14 +49,14 @@ namespace VST {
                 })
             };
 
-            Endpoint[] endpoints = this.controller.GetAudioEndpoints();
-            Endpoint currentEndpoint = this.controller.GetDefaultAudioEndpoint();
+            Device[] endpoints = this.controller.GetAudioDevices(DeviceType.Render, DeviceState.Active);
+            Device currentEndpoint = this.controller.GetDefaultAudioDevice(DeviceType.Render, DeviceRole.Multimedia);
 
-            Endpoint defaultEndpoint = endpoints.First((Endpoint e) => {
+            Device defaultEndpoint = endpoints.First((Device e) => {
                 return e.FriendlyName == Settings.Default.DefaultDeviceName;
             });
 
-            Endpoint targetEndpoint = endpoints.First((Endpoint e) => {
+            Device targetEndpoint = endpoints.First((Device e) => {
                 return e.FriendlyName == Settings.Default.TargetDeviceName;
             });
 
@@ -90,7 +90,7 @@ namespace VST {
             targetEndpoint.Volume = transform.Forward(volume);
             targetEndpoint.Muted = muted;
 
-            this.controller.SetDefaultAudioEndpoint(targetEndpoint);
+            this.controller.SetDefaultAudioDevice(targetEndpoint, DeviceRole.Multimedia);
 
             currentEndpoint.Volume = 1.0f;
             currentEndpoint.Muted = false;
@@ -102,7 +102,7 @@ namespace VST {
                 currentEndpoint.Volume = transform.Inverse(volume);
                 currentEndpoint.Muted = muted;
 
-                this.controller.SetDefaultAudioEndpoint(currentEndpoint);
+                this.controller.SetDefaultAudioDevice(currentEndpoint, DeviceRole.Multimedia);
             };
 
             // Launch program

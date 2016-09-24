@@ -16,21 +16,21 @@ namespace VST {
         public Configuration(Controller controller) {
             InitializeComponent();
 
-            Endpoint[] endpoints = controller.GetAudioEndpoints();
+            Device[] endpoints = controller.GetAudioDevices(DeviceType.Render, DeviceState.Active);
 
             this.comboDefaultDevice.DataSource = endpoints.Clone();
             this.comboTargetDevice.DataSource = endpoints.Clone();
 
             if (Settings.Default.DefaultDeviceName.Trim().Length == 0) {
-                this.comboDefaultDevice.SelectedItem = controller.GetDefaultAudioEndpoint();
+                this.comboDefaultDevice.SelectedItem = controller.GetDefaultAudioDevice(DeviceType.Render, DeviceRole.Multimedia);
             } else {
-                this.comboDefaultDevice.SelectedItem = endpoints.First((Endpoint e) => {
+                this.comboDefaultDevice.SelectedItem = endpoints.First((Device e) => {
                     return e.FriendlyName == Settings.Default.DefaultDeviceName;
                 });
             }
 
             if (Settings.Default.TargetDeviceName.Trim().Length != 0) {
-                this.comboTargetDevice.SelectedItem = endpoints.First((Endpoint e) => {
+                this.comboTargetDevice.SelectedItem = endpoints.First((Device e) => {
                     return e.FriendlyName == Settings.Default.TargetDeviceName;
                 });
             }
@@ -47,16 +47,16 @@ namespace VST {
 
         private bool HasUnsavedChanges() {
             return (
-                Settings.Default.DefaultDeviceName != ((Endpoint)this.comboDefaultDevice.SelectedItem).FriendlyName
-                || Settings.Default.TargetDeviceName != ((Endpoint)this.comboTargetDevice.SelectedItem).FriendlyName
+                Settings.Default.DefaultDeviceName != ((Device)this.comboDefaultDevice.SelectedItem).FriendlyName
+                || Settings.Default.TargetDeviceName != ((Device)this.comboTargetDevice.SelectedItem).FriendlyName
                 || Settings.Default.ExecutablePath != this.txtExecutablePath.Text
                 || Settings.Default.Transform != this.txtTransform.Text
             );
         }
 
         private void Save() {
-            Settings.Default.DefaultDeviceName = ((Endpoint)this.comboDefaultDevice.SelectedItem).FriendlyName;
-            Settings.Default.TargetDeviceName = ((Endpoint)this.comboTargetDevice.SelectedItem).FriendlyName;
+            Settings.Default.DefaultDeviceName = ((Device)this.comboDefaultDevice.SelectedItem).FriendlyName;
+            Settings.Default.TargetDeviceName = ((Device)this.comboTargetDevice.SelectedItem).FriendlyName;
             Settings.Default.ExecutablePath = this.txtExecutablePath.Text;
             Settings.Default.Transform = this.txtTransform.Text;
 
