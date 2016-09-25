@@ -59,14 +59,14 @@ namespace VST {
 		private class CMMNotificationClient : public IMMNotificationClient {
 		private:
 			LONG _cRef;
-			gcroot<GCHandle^> hController;
+			GCHandle hController;
 		public:
-			CMMNotificationClient(GCHandle^ hController);
+			CMMNotificationClient(void* pController);
 			~CMMNotificationClient();
 
 			ULONG STDMETHODCALLTYPE AddRef();
 			ULONG STDMETHODCALLTYPE Release();
-			HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, VOID ** ppvInterface);
+			HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, VOID** ppvInterface);
 
 			HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDefaultDevice);
 			HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR pwstrDeviceId);

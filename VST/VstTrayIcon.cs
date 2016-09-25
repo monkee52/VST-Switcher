@@ -36,16 +36,14 @@ namespace VST {
                 }
             }
 
-            EventHandler configureEventHandler = new EventHandler((object sender, EventArgs e) => {
-                this.Configure();
-            });
-
             this.trayIcon = new NotifyIcon() {
                 Icon = Resources.AppIcon,
                 Visible = true,
                 Text = "VST Switcher",
                 ContextMenu = new ContextMenu(new MenuItem[] {
-                    new MenuItem("Configure", configureEventHandler)
+                    new MenuItem("Configure", (object sender, EventArgs e) => {
+                        this.Configure();
+                    })
                 })
             };
 

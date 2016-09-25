@@ -4,14 +4,17 @@
 
 namespace VST {
 	namespace Audio {
-		CMMNotificationClient::CMMNotificationClient(GCHandle^ hController) {
+		CMMNotificationClient::CMMNotificationClient(void* pController) {
 			this->_cRef = 1;
+			
+			IntPtr mpController(pController);
+			GCHandle hController = GCHandle::FromIntPtr(mpController);
 
 			this->hController = hController;
 		}
 
 		CMMNotificationClient::~CMMNotificationClient() {
-			this->hController->Free();
+			this->hController.Free();
 		}
 
 		ULONG CMMNotificationClient::AddRef() {
@@ -47,31 +50,31 @@ namespace VST {
 		}
 
 		HRESULT CMMNotificationClient::OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDefaultDevice) {
-			((Controller^)this->hController->Target)->FireDefaultDeviceChanged(flow, role, pwstrDefaultDevice);
+			((Controller^)this->hController.Target)->FireDefaultDeviceChanged(flow, role, pwstrDefaultDevice);
 
 			return S_OK;
 		}
 
 		HRESULT CMMNotificationClient::OnDeviceAdded(LPCWSTR pwstrDeviceId) {
-			((Controller^)this->hController->Target)->FireDeviceAdded(pwstrDeviceId);
+			((Controller^)this->hController.Target)->FireDeviceAdded(pwstrDeviceId);
 
 			return S_OK;
 		}
 
 		HRESULT CMMNotificationClient::OnDeviceRemoved(LPCWSTR pwstrDeviceId) {
-			((Controller^)this->hController->Target)->FireDeviceRemoved(pwstrDeviceId);
+			((Controller^)this->hController.Target)->FireDeviceRemoved(pwstrDeviceId);
 
 			return S_OK;
 		}
 
 		HRESULT CMMNotificationClient::OnDeviceStateChanged(LPCWSTR pwstrDeviceId, DWORD dwNewState) {
-			((Controller^)this->hController->Target)->FireDeviceStateChanged(pwstrDeviceId, dwNewState);
+			((Controller^)this->hController.Target)->FireDeviceStateChanged(pwstrDeviceId, dwNewState);
 
 			return S_OK;
 		}
 
 		HRESULT CMMNotificationClient::OnPropertyValueChanged(LPCWSTR pwstrDeviceId, const PROPERTYKEY key) {
-			((Controller^)this->hController->Target)->FirePropertyValueChanged(pwstrDeviceId, key);
+			((Controller^)this->hController.Target)->FirePropertyValueChanged(pwstrDeviceId, key);
 
 			return S_OK;
 		}

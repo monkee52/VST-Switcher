@@ -21,9 +21,9 @@ namespace VST {
 				throw gcnew ApplicationException(ConvertHrToString(hr));
 			}
 
-			GCHandle^ hThis = GCHandle::Alloc(this, GCHandleType::Weak);
+			GCHandle hThis = GCHandle::Alloc(this, GCHandleType::Weak);
 
-			this->notificationClient = new CMMNotificationClient(hThis);
+			this->notificationClient = new CMMNotificationClient(GCHandle::ToIntPtr(hThis).ToPointer());
 
 			hr = pEnumerator->RegisterEndpointNotificationCallback(this->notificationClient);
 

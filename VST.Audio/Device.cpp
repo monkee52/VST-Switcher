@@ -71,7 +71,9 @@ namespace VST {
 		Single Device::Volume::get() {
 			float volume;
 
-			VolumeCommon(this->Id, false, &volume, nullptr);
+			pin_ptr<float> pVolume = &volume;
+
+			VolumeCommon(this->Id, false, pVolume, nullptr);
 
 			return volume;
 		}
@@ -79,19 +81,25 @@ namespace VST {
 		void Device::Volume::set(float volume) {
 			volume = (volume < 0.0f ? 0.0f : (volume > 1.0f ? 1.0f : volume));
 
-			VolumeCommon(this->Id, true, &volume, nullptr);
+			pin_ptr<float> pVolume = &volume;
+
+			VolumeCommon(this->Id, true, pVolume, nullptr);
 		}
 
 		bool Device::Muted::get() {
 			bool mute;
 
-			VolumeCommon(this->Id, false, nullptr, &mute);
+			pin_ptr<bool> pMute = &mute;
+
+			VolumeCommon(this->Id, false, nullptr, pMute);
 
 			return mute;
 		}
 
 		void Device::Muted::set(bool mute) {
-			VolumeCommon(this->Id, true, nullptr, &mute);
+			pin_ptr<bool> pMute = &mute;
+
+			VolumeCommon(this->Id, true, nullptr, pMute);
 		}
 
 		bool Device::Equals(Object^ otherDevice) {
